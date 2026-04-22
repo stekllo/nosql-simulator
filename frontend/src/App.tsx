@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppLayout }       from "@/components/AppLayout";
 import { CoursePage }      from "@/pages/CoursePage";
+import { DashboardPage }   from "@/pages/DashboardPage";
 import { HomePage }        from "@/pages/HomePage";
 import { LessonPage }      from "@/pages/LessonPage";
 import { LoginPage }       from "@/pages/LoginPage";
@@ -24,15 +25,12 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route path="/"                    element={<HomePage    />} />
-        <Route path="/courses/:courseId"   element={<CoursePage  />} />
-        <Route path="/lessons/:lessonId"   element={<LessonPage  />} />
-        <Route path="/tasks/:taskId"       element={<TaskPage    />} />
-        <Route path="/profile"             element={<ProfilePage />} />
-        <Route
-          path="/learning"
-          element={<div className="max-w-5xl mx-auto px-6 py-10 text-sm text-slate-500">Раздел «Обучение» появится позже.</div>}
-        />
+        <Route path="/"                    element={<HomePage      />} />
+        <Route path="/courses/:courseId"   element={<CoursePage    />} />
+        <Route path="/lessons/:lessonId"   element={<LessonPage    />} />
+        <Route path="/tasks/:taskId"       element={<TaskPage      />} />
+        <Route path="/dashboard"           element={<DashboardPage />} />
+        <Route path="/profile"             element={<ProfilePage   />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

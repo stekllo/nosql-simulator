@@ -1,11 +1,7 @@
-/** Общий layout: top-bar сверху, контент снизу.
- *
- * Top-bar повторяет дизайн из макетов ВКР: синий логотип, навигация,
- * аватар с инициалами справа и выпадающее меню с выходом.
- */
+/** Общий layout: top-bar сверху, контент снизу. */
 import { useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LogOut, User as UserIcon } from "lucide-react";
+import { LogOut, User as UserIcon, LayoutDashboard } from "lucide-react";
 
 import { useAuthStore } from "@/stores/auth";
 import { useMe } from "@/hooks/useAuth";
@@ -64,8 +60,7 @@ export function AppLayout() {
 
         <nav className="ml-8 flex items-center gap-1">
           <NavLink to="/"          className={navLinkCls} end>Каталог</NavLink>
-          <NavLink to="/learning"  className={navLinkCls}>Обучение</NavLink>
-          <NavLink to="/profile"   className={navLinkCls}>Личный кабинет</NavLink>
+          <NavLink to="/dashboard" className={navLinkCls}>Личный кабинет</NavLink>
         </nav>
 
         <div className="ml-auto relative">
@@ -95,6 +90,14 @@ export function AppLayout() {
                 onClick={() => setMenuOpen(false)}
               />
               <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-md border border-gray-200 shadow-lg py-1 z-20">
+                <Link
+                  to="/dashboard"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  Личный кабинет
+                </Link>
                 <Link
                   to="/profile"
                   onClick={() => setMenuOpen(false)}

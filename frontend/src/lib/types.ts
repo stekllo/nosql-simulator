@@ -107,3 +107,59 @@ export interface SubmitResponse {
   error?:        string | null;
   submitted_at:  string;
 }
+
+
+// ---------- Dashboard ----------
+
+export interface DailyActivity {
+  day:     string;        // ISO date
+  correct: number;
+  wrong:   number;
+}
+
+export interface CourseProgress {
+  course_id:    number;
+  course_title: string;
+  nosql_type:   NoSQLType;
+  percent:      number;
+  total_score:  number;
+  module_count: number;
+  lesson_count: number;
+  lessons_done: number;
+}
+
+export interface AchievementBrief {
+  achievement_id: number;
+  name:           string;
+  description:    string | null;
+  icon:           string | null;
+  points:         number;
+  granted:        boolean;
+  granted_at:     string | null;
+}
+
+export interface DashboardResponse {
+  active_courses:  number;
+  total_courses:   number;
+  solved_tasks:    number;
+  available_tasks: number;
+  weekly_delta:    number;
+  total_score:     number;
+  recent_score:    number;
+  streak_days:     number;
+  best_streak:     number;
+  activity:        DailyActivity[];
+  current_courses: CourseProgress[];
+  achievements:    AchievementBrief[];
+}
+
+export interface SubmissionBrief {
+  submission_id: number;
+  task_id:       number;
+  is_correct:    boolean | null;
+  score:         number  | null;
+  status:        SubmissionStatus;
+  submitted_at:  string;
+  lesson_title:  string;
+  course_title:  string;
+}

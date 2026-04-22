@@ -1,7 +1,7 @@
 {
   "name": "nosql-sim-frontend",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev":     "vite",
@@ -16,7 +16,9 @@
     "zustand":            "^5.0.0",
     "axios":              "^1.7.0",
     "react-hook-form":    "^7.53.0",
-    "lucide-react":       "^0.460.0"
+    "lucide-react":       "^0.460.0",
+    "react-markdown":     "^9.0.1",
+    "remark-gfm":         "^4.0.0"
   },
   "devDependencies": {
     "@types/react":     "^18.3.12",

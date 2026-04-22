@@ -10,3 +10,115 @@ html, body, #root {
   height: 100%;
   margin: 0;
 }
+
+
+/* ============ Стили для Markdown-контента урока ============
+ * Обычные Tailwind-утилиты к сгенерированным <h1>, <p>, <code> и т. п.
+ * применить нельзя — ReactMarkdown отдаёт чистый HTML. Вешаем стили
+ * на родительский .prose-lesson через дочерние селекторы.
+ */
+
+.prose-lesson {
+  color: #0f172a;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.prose-lesson h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  letter-spacing: -0.01em;
+}
+
+.prose-lesson h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 1.75rem 0 0.75rem;
+}
+
+.prose-lesson h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.prose-lesson p {
+  margin: 0 0 0.9rem;
+}
+
+.prose-lesson ul, .prose-lesson ol {
+  margin: 0 0 1rem;
+  padding-left: 1.5rem;
+}
+
+.prose-lesson li {
+  margin: 0.3rem 0;
+}
+
+.prose-lesson a {
+  color: #1a6fb6;
+  text-decoration: underline;
+}
+
+.prose-lesson code {
+  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-size: 0.87em;
+  background: #f1f5f9;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: #0f172a;
+}
+
+.prose-lesson pre {
+  background: #1e293b;
+  color: #e2e8f0;
+  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-size: 0.82rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: 6px;
+  margin: 0.8rem 0 1.2rem;
+  overflow-x: auto;
+  line-height: 1.55;
+}
+
+.prose-lesson pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.prose-lesson strong {
+  font-weight: 600;
+}
+
+.prose-lesson blockquote {
+  border-left: 3px solid #cbd5e1;
+  padding-left: 1rem;
+  color: #64748b;
+  margin: 1rem 0;
+}
+
+.prose-lesson hr {
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+  margin: 1.5rem 0;
+}
+
+.prose-lesson table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.9rem;
+}
+
+.prose-lesson th, .prose-lesson td {
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 0.7rem;
+  text-align: left;
+}
+
+.prose-lesson th {
+  background: #f8fafc;
+  font-weight: 600;
+}

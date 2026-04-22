@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "nosql-sim-backend"
-version     = "0.1.0"
+version     = "0.2.0"
 description = "Backend for NoSQL Simulator"
 authors     = ["Yuri Adzhem"]
 readme      = "../README.md"
@@ -12,7 +12,7 @@ python   = "^3.12"
 # Web framework
 fastapi  = "^0.115.0"
 uvicorn  = { extras = ["standard"], version = "^0.32.0" }
-pydantic = "^2.9.0"
+pydantic = { extras = ["email"], version = "^2.9.0" }
 pydantic-settings = "^2.6.0"
 
 # DB drivers / ORM
@@ -21,12 +21,12 @@ asyncpg    = "^0.30.0"
 alembic    = "^1.14.0"
 
 # Auth
+bcrypt        = "^4.2.0"
 "python-jose" = { extras = ["cryptography"], version = "^3.3.0" }
-passlib       = { extras = ["bcrypt"], version = "^1.7.4" }
 "python-multipart" = "^0.0.12"
 
 # NoSQL drivers (для песочниц)
-motor    = "^3.6.0"            # MongoDB async
+motor    = "^3.6.0"
 redis    = "^5.2.0"
 neo4j    = "^5.27.0"
 "cassandra-driver" = "^3.29.0"
@@ -36,9 +36,9 @@ neo4j    = "^5.27.0"
 httpx           = "^0.28.0"
 
 [tool.poetry.group.dev.dependencies]
-pytest        = "^8.3.0"
+pytest         = "^8.3.0"
 pytest-asyncio = "^0.24.0"
-ruff          = "^0.8.0"
+ruff           = "^0.8.0"
 
 [build-system]
 requires      = ["poetry-core"]

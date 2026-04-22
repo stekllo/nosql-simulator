@@ -1,15 +1,18 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import { AppLayout }       from "@/components/AppLayout";
-import { CoursePage }      from "@/pages/CoursePage";
-import { DashboardPage }   from "@/pages/DashboardPage";
-import { HomePage }        from "@/pages/HomePage";
-import { LessonPage }      from "@/pages/LessonPage";
-import { LoginPage }       from "@/pages/LoginPage";
-import { ProfilePage }     from "@/pages/ProfilePage";
-import { RegisterPage }    from "@/pages/RegisterPage";
-import { TaskPage }        from "@/pages/TaskPage";
-import { ProtectedRoute }  from "@/routes/ProtectedRoute";
+import { AppLayout }          from "@/components/AppLayout";
+import { BuilderCoursePage }  from "@/pages/BuilderCoursePage";
+import { BuilderPage }        from "@/pages/BuilderPage";
+import { CoursePage }         from "@/pages/CoursePage";
+import { DashboardPage }      from "@/pages/DashboardPage";
+import { HomePage }           from "@/pages/HomePage";
+import { LessonPage }         from "@/pages/LessonPage";
+import { LoginPage }          from "@/pages/LoginPage";
+import { ProfilePage }        from "@/pages/ProfilePage";
+import { RegisterPage }       from "@/pages/RegisterPage";
+import { TaskBuilderPage }    from "@/pages/TaskBuilderPage";
+import { TaskPage }           from "@/pages/TaskPage";
+import { ProtectedRoute }     from "@/routes/ProtectedRoute";
 
 
 export default function App() {
@@ -25,12 +28,18 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route path="/"                    element={<HomePage      />} />
-        <Route path="/courses/:courseId"   element={<CoursePage    />} />
-        <Route path="/lessons/:lessonId"   element={<LessonPage    />} />
-        <Route path="/tasks/:taskId"       element={<TaskPage      />} />
-        <Route path="/dashboard"           element={<DashboardPage />} />
-        <Route path="/profile"             element={<ProfilePage   />} />
+        <Route path="/"                                  element={<HomePage          />} />
+        <Route path="/courses/:courseId"                 element={<CoursePage        />} />
+        <Route path="/lessons/:lessonId"                 element={<LessonPage        />} />
+        <Route path="/tasks/:taskId"                     element={<TaskPage          />} />
+        <Route path="/dashboard"                         element={<DashboardPage     />} />
+        <Route path="/profile"                           element={<ProfilePage       />} />
+
+        {/* Конструктор (backend сам проверяет роль teacher/admin через 403) */}
+        <Route path="/builder"                           element={<BuilderPage       />} />
+        <Route path="/builder/courses/:courseId"         element={<BuilderCoursePage />} />
+        <Route path="/builder/lessons/:lessonId/tasks/new"
+                                                         element={<TaskBuilderPage   />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

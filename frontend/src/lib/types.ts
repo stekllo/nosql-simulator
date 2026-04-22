@@ -112,7 +112,7 @@ export interface SubmitResponse {
 // ---------- Dashboard ----------
 
 export interface DailyActivity {
-  day:     string;        // ISO date
+  day:     string;
   correct: number;
   wrong:   number;
 }
@@ -162,4 +162,34 @@ export interface SubmissionBrief {
   submitted_at:  string;
   lesson_title:  string;
   course_title:  string;
+}
+
+
+// ---------- Конструктор ----------
+
+export interface TaskCreate {
+  statement:          string;
+  db_type:            NoSQLType;
+  fixture:            Record<string, unknown>;
+  reference_solution: string;
+  max_score:          number;
+  attempts_limit:     number;
+}
+
+export interface TaskOut {
+  task_id:            number;
+  lesson_id:          number;
+  statement:          string;
+  db_type:            NoSQLType;
+  fixture:            Record<string, unknown>;
+  reference_solution: string;
+  max_score:          number;
+  attempts_limit:     number;
+}
+
+export interface ReferenceDryRun {
+  ok:          boolean;
+  duration_ms: number;
+  result?:     unknown;
+  error?:      string | null;
 }

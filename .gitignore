@@ -1,0 +1,32 @@
+# ====== Python ======
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# ====== Node ======
+node_modules/
+dist/
+.vite/
+*.log
+
+# ====== IDE ======
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# ====== OS ======
+.DS_Store
+Thumbs.db
+
+# ====== Env ======
+.env
+.env.local
+
+# ====== Docker ======
+# Volumes хранятся Docker'ом отдельно — здесь ничего не лежит,
+# но на всякий случай:
+docker-data/

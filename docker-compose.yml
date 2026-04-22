@@ -1,0 +1,150 @@
+# ============================================================
+# NoSQL Simulator — оркестрация всего стека для локальной разработки.
+#
+# 5 СУБД (Postgres + 4 NoSQL песочницы), брокер задач и приложение.
+# Все сервисы общаются по внутренней сети, наружу торчат только
+# фронтенд (3000) и API (8000) — этого достаточно.
+# ============================================================
+
+services:
+
+  # ---------- Метаданные ----------
+  postgres:
+    image: postgres:15-alpine
+    container_name: ns-postgres
+    environment:
+      POSTGRES_USER:     sim
+      POSTGRES_PASSWORD: sim
+      POSTGRES_DB:       sim
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:     ["CMD-SHELL", "pg_isready -U sim"]
+      interval: 5s
+      timeout:  3s
+      retries:  10
+
+  # ---------- NoSQL песочница ----------
+  mongo:
+    image: mongo:7
+    container_name: ns-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test:     ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
+      interval: 10s
+      timeout:  5s
+      retries:  10
+
+  redis-sandbox:
+    image: redis:7-alpine
+    container_name: ns-redis-sandbox
+    ports:
+      - "6380:6379"     # снаружи 6380, чтобы не путать с брокером
+    healthcheck:
+      test:     ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries:  10
+
+  cassandra:
+    image: cassandra:4
+    container_name: ns-cassandra
+    environment:
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE:  100M
+    ports:
+      - "9042:9042"
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    healthcheck:
+      test:         ["CMD", "cqlsh", "-e", "DESCRIBE KEYSPACES"]
+      interval:     30s
+      timeout:      10s
+      retries:      10
+      start_period: 60s
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: ns-neo4j
+    environment:
+      NEO4J_AUTH:                    neo4j/changeme123
+      NEO4J_server_memory_heap_max__size: 512M
+    ports:
+      - "7474:7474"     # HTTP браузер
+      - "7687:7687"     # Bolt протокол
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test:         ["CMD-SHELL", "wget --quiet --spider http://localhost:7474 || exit 1"]
+      interval:     15s
+      timeout:      5s
+      retries:      10
+      start_period: 30s
+
+  # ---------- Брокер для Celery (на будущее) ----------
+  redis-broker:
+    image: redis:7-alpine
+    container_name: ns-redis-broker
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test:     ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries:  10
+
+  # ---------- Приложение ----------
+  backend:
+    build:
+      context:    ./backend
+      dockerfile: Dockerfile
+    container_name: ns-backend
+    environment:
+      DATABASE_URL:      "postgresql+asyncpg://sim:sim@postgres:5432/sim"
+      MONGO_URL:         "mongodb://mongo:27017"
+      REDIS_SANDBOX_URL: "redis://redis-sandbox:6379"
+      CASSANDRA_HOST:    "cassandra"
+      NEO4J_URL:         "bolt://neo4j:7687"
+      NEO4J_AUTH:        "neo4j:changeme123"
+      REDIS_BROKER_URL:  "redis://redis-broker:6379/0"
+      JWT_SECRET:        "dev-only-change-me-in-prod"
+      LOG_LEVEL:         "INFO"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app    # Hot reload — исходники монтируются внутрь
+    depends_on:
+      postgres:      { condition: service_healthy }
+      mongo:         { condition: service_healthy }
+      redis-sandbox: { condition: service_healthy }
+      redis-broker:  { condition: service_healthy }
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+
+  frontend:
+    build:
+      context:    ./frontend
+      dockerfile: Dockerfile
+    container_name: ns-frontend
+    environment:
+      VITE_API_URL: "http://localhost:8000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: pnpm dev --host 0.0.0.0 --port 3000
+
+volumes:
+  postgres-data:
+  mongo-data:
+  cassandra-data:
+  neo4j-data:

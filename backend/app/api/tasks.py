@@ -1,0 +1,158 @@
+"""Эндпоинты /tasks — получение задания и запуск запросов."""
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from motor.motor_asyncio import AsyncIOMotorClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.core.config import settings
+from app.core.deps import CurrentUser
+from app.db import get_db
+from app.models import Lesson, NoSQLType, Submission, SubmissionStatus, Task
+from app.sandbox.mongo_runner import compare_results, execute_mql
+from app.schemas.course import LessonDetail, TaskBrief
+from app.schemas.submission import RunRequest, RunResponse, SubmitResponse
+
+router = APIRouter()
+
+
+async def _get_task_or_404(session: AsyncSession, task_id: int) -> Task:
+    result = await session.execute(select(Task).where(Task.task_id == task_id))
+    task   = result.scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Задание не найдено")
+    return task
+
+
+def _assert_supported(task: Task) -> None:
+    if task.db_type != NoSQLType.DOCUMENT:
+        raise HTTPException(
+            status.HTTP_501_NOT_IMPLEMENTED,
+            f"Проверка для {task.db_type.value} будет добавлена позже. "
+            f"Пока поддерживается только MongoDB (document).",
+        )
+
+
+@router.get("/{task_id}/lesson", response_model=LessonDetail)
+async def get_lesson_for_task(
+    task_id: int,
+    _user:   CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> LessonDetail:
+    """Возвращает урок, в котором лежит это задание (теория + список заданий)."""
+    result = await session.execute(
+        select(Lesson)
+        .options(selectinload(Lesson.tasks))
+        .join(Task, Task.lesson_id == Lesson.lesson_id)
+        .where(Task.task_id == task_id)
+    )
+    lesson = result.scalar_one_or_none()
+    if lesson is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Задание не найдено")
+
+    return LessonDetail(
+        lesson_id    = lesson.lesson_id,
+        module_id    = lesson.module_id,
+        title        = lesson.title,
+        content_md   = lesson.content_md,
+        order_num    = lesson.order_num,
+        duration_min = lesson.duration_min,
+        tasks        = [
+            TaskBrief(
+                task_id   = t.task_id,
+                statement = t.statement,
+                db_type   = t.db_type,
+                max_score = t.max_score,
+            )
+            for t in sorted(lesson.tasks, key=lambda x: x.task_id)
+        ],
+    )
+
+
+@router.post("/{task_id}/run", response_model=RunResponse)
+async def run_query(
+    task_id: int,
+    body:    RunRequest,
+    _user:   CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> RunResponse:
+    task = await _get_task_or_404(session, task_id)
+    _assert_supported(task)
+
+    client = AsyncIOMotorClient(settings.MONGO_URL, serverSelectionTimeoutMS=3000)
+    try:
+        outcome = await execute_mql(client, task.fixture, body.query_text)
+    finally:
+        client.close()
+
+    return RunResponse(
+        ok          = outcome.ok,
+        duration_ms = outcome.duration_ms,
+        result      = outcome.result,
+        error       = outcome.error,
+    )
+
+
+@router.post("/{task_id}/submit", response_model=SubmitResponse)
+async def submit_solution(
+    task_id: int,
+    body:    RunRequest,
+    user:    CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> SubmitResponse:
+    task = await _get_task_or_404(session, task_id)
+    _assert_supported(task)
+
+    client = AsyncIOMotorClient(settings.MONGO_URL, serverSelectionTimeoutMS=3000)
+    try:
+        student_outcome   = await execute_mql(client, task.fixture, body.query_text)
+        reference_outcome = await execute_mql(client, task.fixture, task.reference_solution)
+    finally:
+        client.close()
+
+    if not student_outcome.ok:
+        status_enum = (
+            SubmissionStatus.TIMEOUT
+            if (student_outcome.error or "").startswith("Превышено")
+            else SubmissionStatus.WRONG
+        )
+        is_correct = False
+        score      = 0
+    else:
+        if not reference_outcome.ok:
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "Эталонное решение упало — свяжитесь с преподавателем",
+            )
+        is_correct  = compare_results(student_outcome.result, reference_outcome.result)
+        status_enum = SubmissionStatus.CORRECT if is_correct else SubmissionStatus.WRONG
+        score       = task.max_score if is_correct else 0
+
+    submission = Submission(
+        user_id    = user.user_id,
+        task_id    = task.task_id,
+        query_text = body.query_text,
+        result     = {
+            "items": student_outcome.result if isinstance(student_outcome.result, list) else None,
+            "value": student_outcome.result if not isinstance(student_outcome.result, list) else None,
+        },
+        is_correct = is_correct,
+        score      = score,
+        status     = status_enum,
+    )
+    session.add(submission)
+    await session.commit()
+    await session.refresh(submission)
+
+    return SubmitResponse(
+        submission_id = submission.submission_id,
+        is_correct    = is_correct,
+        score         = score,
+        status        = status_enum,
+        duration_ms   = student_outcome.duration_ms,
+        result        = student_outcome.result,
+        error         = student_outcome.error,
+        submitted_at  = submission.submitted_at,
+    )

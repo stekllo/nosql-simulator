@@ -7,6 +7,7 @@ import { LessonPage }      from "@/pages/LessonPage";
 import { LoginPage }       from "@/pages/LoginPage";
 import { ProfilePage }     from "@/pages/ProfilePage";
 import { RegisterPage }    from "@/pages/RegisterPage";
+import { TaskPage }        from "@/pages/TaskPage";
 import { ProtectedRoute }  from "@/routes/ProtectedRoute";
 
 
@@ -23,9 +24,10 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route path="/"                    element={<HomePage   />} />
-        <Route path="/courses/:courseId"   element={<CoursePage />} />
-        <Route path="/lessons/:lessonId"   element={<LessonPage />} />
+        <Route path="/"                    element={<HomePage    />} />
+        <Route path="/courses/:courseId"   element={<CoursePage  />} />
+        <Route path="/lessons/:lessonId"   element={<LessonPage  />} />
+        <Route path="/tasks/:taskId"       element={<TaskPage    />} />
         <Route path="/profile"             element={<ProfilePage />} />
         <Route
           path="/learning"

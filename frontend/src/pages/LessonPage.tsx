@@ -24,7 +24,6 @@ export function LessonPage() {
         ← Вернуться в каталог
       </Link>
 
-      {/* Заголовок урока */}
       <div className="mt-3">
         <div className="flex items-center gap-3 text-xs text-slate-500">
           <span className="text-[11px] uppercase tracking-wider">Урок {lesson.order_num}</span>
@@ -43,7 +42,6 @@ export function LessonPage() {
         </div>
       </div>
 
-      {/* Контент (Markdown) */}
       <article className="mt-6 bg-white rounded-lg border border-slate-200 p-8">
         <div className="prose-lesson">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -52,7 +50,6 @@ export function LessonPage() {
         </div>
       </article>
 
-      {/* Задания */}
       {lesson.tasks.length > 0 && (
         <section className="mt-8">
           <h2 className="text-[15px] font-semibold mb-3">Практические задания</h2>
@@ -68,13 +65,13 @@ export function LessonPage() {
                   <span>{task.max_score} баллов</span>
                 </div>
                 <p className="text-sm text-slate-900 leading-relaxed">{task.statement}</p>
-                <button
-                  disabled
-                  className="mt-3 px-3 py-1.5 text-xs text-slate-500 bg-slate-100 rounded border border-slate-200 cursor-not-allowed"
-                  title="Редактор запросов появится в следующем обновлении"
+
+                <Link
+                  to={`/tasks/${task.task_id}`}
+                  className="inline-block mt-3 px-3 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded font-medium"
                 >
-                  Открыть редактор (скоро)
-                </button>
+                  Открыть редактор
+                </Link>
               </div>
             ))}
           </div>

@@ -3,6 +3,9 @@
 export type UserRole  = "student" | "teacher" | "admin";
 export type NoSQLType = "document" | "key_value" | "column" | "graph" | "mixed";
 
+export type SubmissionStatus = "pending" | "correct" | "wrong" | "timeout";
+
+
 export interface User {
   user_id:      number;
   login:        string;
@@ -78,4 +81,29 @@ export interface LessonDetail {
   order_num:    number;
   duration_min: number | null;
   tasks:        TaskBrief[];
+}
+
+
+// ---------- Запуск и проверка заданий ----------
+
+export interface RunRequest {
+  query_text: string;
+}
+
+export interface RunResponse {
+  ok:          boolean;
+  duration_ms: number;
+  result?:     unknown;
+  error?:      string | null;
+}
+
+export interface SubmitResponse {
+  submission_id: number;
+  is_correct:    boolean | null;
+  score:         number  | null;
+  status:        SubmissionStatus;
+  duration_ms:   number;
+  result?:       unknown;
+  error?:        string | null;
+  submitted_at:  string;
 }

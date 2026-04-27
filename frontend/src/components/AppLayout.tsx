@@ -1,10 +1,11 @@
 /** Общий layout: top-bar сверху, контент снизу.
  *
  * Пункт меню «Конструктор» показывается только роли teacher/admin.
+ * Пункт «Студенты» — преподавателю (его студенты) и админу (все).
  */
 import { useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LogOut, User as UserIcon, LayoutDashboard, Hammer } from "lucide-react";
+import { LogOut, User as UserIcon, LayoutDashboard, Hammer, Users } from "lucide-react";
 
 import { useAuthStore } from "@/stores/auth";
 import { useMe } from "@/hooks/useAuth";
@@ -50,7 +51,8 @@ export function AppLayout() {
       ? "bg-gray-100 font-medium text-gray-900"
       : "text-gray-600 hover:bg-gray-100");
 
-  const canBuild = user?.role === "teacher" || user?.role === "admin";
+  const canBuild   = user?.role === "teacher" || user?.role === "admin";
+  const canTeacher = user?.role === "teacher" || user?.role === "admin";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -66,6 +68,9 @@ export function AppLayout() {
         <nav className="ml-8 flex items-center gap-1">
           <NavLink to="/"          className={navLinkCls} end>Каталог</NavLink>
           <NavLink to="/dashboard" className={navLinkCls}>Личный кабинет</NavLink>
+          {canTeacher && (
+            <NavLink to="/teacher/students" className={navLinkCls}>Студенты</NavLink>
+          )}
           {canBuild && (
             <NavLink to="/builder" className={navLinkCls}>Конструктор</NavLink>
           )}
@@ -108,6 +113,13 @@ export function AppLayout() {
                   <UserIcon className="w-4 h-4" />
                   Профиль
                 </Link>
+                {canTeacher && (
+                  <Link to="/teacher/students" onClick={() => setMenuOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    <Users className="w-4 h-4" />
+                    Студенты
+                  </Link>
+                )}
                 {canBuild && (
                   <Link to="/builder" onClick={() => setMenuOpen(false)}
                         className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">

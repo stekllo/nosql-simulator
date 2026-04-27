@@ -197,3 +197,70 @@ export interface ReferenceDryRun {
   result?:     unknown;
   error?:      string | null;
 }
+
+
+// ---------- Кабинет преподавателя ----------
+
+export interface StudentBrief {
+  user_id:           number;
+  login:             string;
+  display_name:      string | null;
+  email:             string;
+  total_attempts:    number;
+  correct_attempts:  number;
+  total_score:       number;
+  courses_started:   number;
+  last_activity_at:  string | null;
+}
+
+export interface TeacherStudentsResponse {
+  students:          StudentBrief[];
+  total_students:    number;
+  active_this_week:  number;
+  teacher_courses:   number;
+  average_score:     number;
+}
+
+export interface StudentCourseProgress {
+  course_id:        number;
+  course_title:     string;
+  nosql_type:       string;
+  total_lessons:    number;
+  total_tasks:      number;
+  solved_tasks:     number;
+  percent:          number;
+  total_score:      number;
+}
+
+export interface StudentSubmission {
+  submission_id:  number;
+  task_id:        number;
+  course_title:   string;
+  lesson_title:   string;
+  statement:      string;
+  is_correct:     boolean | null;
+  score:          number  | null;
+  status:         string;
+  submitted_at:   string;
+}
+
+export interface StudentDailyActivity {
+  day:     string;
+  correct: number;
+  wrong:   number;
+}
+
+export interface StudentDetailResponse {
+  user_id:            number;
+  login:              string;
+  display_name:       string | null;
+  email:              string;
+  total_attempts:     number;
+  correct_attempts:   number;
+  total_score:        number;
+  courses_started:    number;
+  last_activity_at:   string | null;
+  course_progress:    StudentCourseProgress[];
+  recent_submissions: StudentSubmission[];
+  activity:           StudentDailyActivity[];
+}

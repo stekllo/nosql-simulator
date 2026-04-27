@@ -1079,44 +1079,51 @@ async def ensure_achievements(session):
 # ДЕМО-АКТИВНОСТЬ СТУДЕНТА (для красивого дашборда на защите)
 # ============================================================================
 
-async def seed_student_activity(session, student: User):
-    """Создаёт демо-сабмишены для аккаунта `student`, чтобы дашборд выглядел живо."""
-    # Проверяем — может, активность уже создавалась.
+async def seed_student_activity(
+    session,
+    student: User,
+    *,
+    days_back:        int   = 28,
+    daily_correct:    tuple[int, int] = (1, 3),  # min, max правильных в день
+    skip_day_chance:  float = 0.15,
+    wrong_chance:     float = 0.30,
+    seed_value:       int   = 42,
+) -> int:
+    """Создаёт демо-сабмишены для студента.
+
+    Возвращает количество созданных сабмишенов.
+    Если у студента уже есть сабмишены — пропускает (идемпотентно).
+    """
     existing = await session.execute(
         select(Submission).where(Submission.user_id == student.user_id).limit(1)
     )
     if existing.scalar_one_or_none() is not None:
-        log.info("student activity already exists, skipping")
-        return
+        log.info("activity for user %s already exists, skipping", student.login)
+        return 0
 
-    # Берём все Mongo-задания с эталонными решениями.
     tasks_q = await session.execute(select(Task).where(Task.db_type == NoSQLType.DOCUMENT))
     tasks = list(tasks_q.scalars().all())
     if not tasks:
         log.warning("no tasks found, cannot seed activity")
-        return
+        return 0
 
     now = datetime.now()  # naive — БД хранит timestamp WITHOUT TIME ZONE
     submissions = []
 
-    # Раскидываем активность за последние 28 дней:
-    # каждый день 1-3 правильных + 0-1 неправильных попыток.
     import random
-    random.seed(42)  # детерминированно для одинаковых данных при пересеве
+    rng = random.Random(seed_value)
 
-    for day_offset in range(28, 0, -1):
+    for day_offset in range(days_back, 0, -1):
         day = now - timedelta(days=day_offset)
-        # Иногда пропускаем день для реалистичности.
-        if random.random() < 0.15:
+        if rng.random() < skip_day_chance:
             continue
 
-        # 1-3 правильные попытки в день.
-        for _ in range(random.randint(1, 3)):
-            task = random.choice(tasks)
+        for _ in range(rng.randint(*daily_correct)):
+            task = rng.choice(tasks)
             ts = day.replace(
-                hour=random.randint(9, 22),
-                minute=random.randint(0, 59),
-                second=random.randint(0, 59),
+                hour=rng.randint(9, 22),
+                minute=rng.randint(0, 59),
+                second=rng.randint(0, 59),
             )
             submissions.append(Submission(
                 user_id    = student.user_id,
@@ -1129,13 +1136,12 @@ async def seed_student_activity(session, student: User):
                 submitted_at = ts,
             ))
 
-        # С шансом 30% — добавляем неправильную попытку.
-        if random.random() < 0.30:
-            task = random.choice(tasks)
+        if rng.random() < wrong_chance:
+            task = rng.choice(tasks)
             ts = day.replace(
-                hour=random.randint(9, 22),
-                minute=random.randint(0, 59),
-                second=random.randint(0, 59),
+                hour=rng.randint(9, 22),
+                minute=rng.randint(0, 59),
+                second=rng.randint(0, 59),
             )
             submissions.append(Submission(
                 user_id    = student.user_id,
@@ -1149,7 +1155,8 @@ async def seed_student_activity(session, student: User):
             ))
 
     session.add_all(submissions)
-    log.info("seeded %d demo submissions for student", len(submissions))
+    log.info("seeded %d demo submissions for %s", len(submissions), student.login)
+    return len(submissions)
 
 
 # ============================================================================
@@ -1177,14 +1184,42 @@ async def main():
             role=UserRole.ADMIN,
         )
 
+        # ---------- Дополнительные демо-студенты с разной активностью ----------
+        demo_students_specs = [
+            ("anna",    "anna@example.com",    "Анна Петрова",    "demo123",
+             {"days_back": 28, "daily_correct": (2, 4), "skip_day_chance": 0.10, "wrong_chance": 0.20, "seed_value": 101}),
+            ("dmitry",  "dmitry@example.com",  "Дмитрий Соколов", "demo123",
+             {"days_back": 21, "daily_correct": (1, 2), "skip_day_chance": 0.30, "wrong_chance": 0.40, "seed_value": 202}),
+            ("maria",   "maria@example.com",   "Мария Иванова",   "demo123",
+             {"days_back": 14, "daily_correct": (1, 3), "skip_day_chance": 0.20, "wrong_chance": 0.25, "seed_value": 303}),
+            ("alex",    "alex@example.com",    "Александр Лебедев","demo123",
+             {"days_back": 7,  "daily_correct": (3, 5), "skip_day_chance": 0.05, "wrong_chance": 0.15, "seed_value": 404}),
+            ("ekaterina","ekaterina@example.com","Екатерина Васильева","demo123",
+             {"days_back": 28, "daily_correct": (1, 1), "skip_day_chance": 0.50, "wrong_chance": 0.50, "seed_value": 505}),
+        ]
+        demo_students = []
+        for login, email, name, password, _ in demo_students_specs:
+            u = await ensure_user(
+                session,
+                login=login, email=email,
+                password=password, display_name=name,
+                role=UserRole.STUDENT,
+            )
+            demo_students.append(u)
+
         for course_data in ALL_COURSES:
             await ensure_course(session, teacher, **course_data)
 
         await ensure_achievements(session)
         await session.flush()
 
-        # Демо-активность только после того, как курсы и задания созданы.
+        # ---------- Активность ----------
+        # Главный демо-студент (`student`).
         await seed_student_activity(session, student)
+
+        # Дополнительные демо-студенты с разной интенсивностью.
+        for (_, _, _, _, params), s_user in zip(demo_students_specs, demo_students):
+            await seed_student_activity(session, s_user, **params)
 
         await session.commit()
         log.info("seed completed successfully")

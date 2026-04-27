@@ -10,6 +10,7 @@ from app.api.courses import router as courses_router
 from app.api.health  import router as health_router
 from app.api.me      import router as me_router
 from app.api.tasks   import router as tasks_router
+from app.api.teacher import router as teacher_router
 from app.core.config import settings
 
 
@@ -20,7 +21,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title       = "NoSQL Simulator API",
-    version     = "0.7.0",
+    version     = "0.8.0",
     description = "Backend для обучающего симулятора NoSQL баз данных",
     lifespan    = lifespan,
 )
@@ -39,8 +40,9 @@ app.include_router(courses_router, prefix="/courses", tags=["courses"])
 app.include_router(tasks_router,   prefix="/tasks",   tags=["tasks"])
 app.include_router(me_router,      prefix="/me",      tags=["me"])
 app.include_router(builder_router, prefix="/builder", tags=["builder"])
+app.include_router(teacher_router, prefix="/teacher", tags=["teacher"])
 
 
 @app.get("/", include_in_schema=False)
 async def root():
-    return {"name": settings.APP_NAME, "version": "0.7.0", "docs": "/docs"}
+    return {"name": settings.APP_NAME, "version": "0.8.0", "docs": "/docs"}

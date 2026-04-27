@@ -57,6 +57,10 @@ from typing import Any
 from cassandra.cluster import Cluster
 from cassandra.query import SimpleStatement
 from cassandra import InvalidRequest, OperationTimedOut
+# cassandra-driver возвращает свои собственные коллекционные классы для CQL-типов
+# set<>, list<>, map<> — они НЕ наследуются от стандартных set/list/dict, поэтому
+# их приходится распознавать явно. Иначе Pydantic упадёт на сериализации ответа.
+from cassandra.util import SortedSet, OrderedMap, OrderedMapSerializedKey
 
 from app.sandbox.cql_parser import (
     CQLParseError, ParsedStatement, parse_cql_script,
@@ -85,9 +89,27 @@ def _normalize(value: Any) -> Any:
     Cassandra возвращает Python-объекты разных типов (UUID, datetime, Decimal,
     set, list, dict). Чтобы compare_to_any_reference нормально сработал,
     приводим всё к строкам/числам/спискам/dict.
+
+    Особенность: cassandra-driver возвращает CQL-коллекции в виде своих
+    собственных классов из cassandra.util:
+      - set<T>     → SortedSet (НЕ наследник set!)
+      - map<K,V>   → OrderedMap / OrderedMapSerializedKey (НЕ наследники dict!)
+      - list<T>    → list (стандартный)
+    Эти классы Pydantic не умеет сериализовать, поэтому распознаём их первыми.
     """
     if value is None:
         return None
+    # ---- Cassandra-специфичные коллекции (проверять ДО стандартных) ----
+    # SortedSet → отсортированный list (детерминированное сравнение).
+    if isinstance(value, SortedSet):
+        try:
+            return sorted(_normalize(v) for v in value)
+        except TypeError:
+            return [_normalize(v) for v in value]
+    # OrderedMap → dict (порядок ключей сохраняем как есть).
+    if isinstance(value, (OrderedMap, OrderedMapSerializedKey)):
+        return {str(_normalize(k)): _normalize(v) for k, v in value.items()}
+    # ---- Стандартные Python-типы ----
     # Множества → отсортированные списки (детерминированное сравнение).
     if isinstance(value, (set, frozenset)):
         try:

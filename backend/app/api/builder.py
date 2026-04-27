@@ -5,18 +5,16 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from motor.motor_asyncio import AsyncIOMotorClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.config import settings
 from app.core.deps import require_role
 from app.db import get_db
 from app.models import (
     Course, Lesson, Module, NoSQLType, Task, User, UserRole,
 )
-from app.sandbox.mongo_runner import execute_mql
+from app.sandbox.dispatch import execute_for_task, is_supported
 from app.schemas.builder import (
     CourseCreate, LessonCreate, LessonUpdate, ModuleCreate,
     ReferenceDryRun, TaskCreate, TaskOut,
@@ -347,17 +345,14 @@ async def reference_dry_run(
     Нужен для preview перед сохранением задания: препод видит,
     что его эталон действительно отрабатывает и возвращает ожидаемое.
     """
-    if body.db_type != NoSQLType.DOCUMENT:
+    if not is_supported(body.db_type):
         raise HTTPException(
             status.HTTP_501_NOT_IMPLEMENTED,
-            "Dry-run пока поддерживается только для MongoDB (document)",
+            f"Dry-run для {body.db_type.value} пока не реализован. "
+            f"Поддерживаются: MongoDB (document), Redis (key_value).",
         )
 
-    client = AsyncIOMotorClient(settings.MONGO_URL, serverSelectionTimeoutMS=3000)
-    try:
-        outcome = await execute_mql(client, body.fixture, body.reference_solution)
-    finally:
-        client.close()
+    outcome = await execute_for_task(body.db_type, body.fixture, body.reference_solution)
 
     return ReferenceDryRun(
         ok          = outcome.ok,
@@ -408,6 +403,22 @@ async def create_task(
                 status.HTTP_400_BAD_REQUEST,
                 '"documents" должен быть массивом',
             )
+
+    if body.db_type == NoSQLType.KEY_VALUE:
+        # Для Redis fixture — это {"preload": ["SET k v", ...]}.
+        # Поле preload опционально (задание может работать с пустой DB).
+        preload = body.fixture.get("preload", [])
+        if not isinstance(preload, list):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                'Fixture для Redis: поле "preload" должно быть массивом строк-команд',
+            )
+        for cmd in preload:
+            if not isinstance(cmd, str):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    'Fixture для Redis: каждая команда в "preload" должна быть строкой',
+                )
 
     task = Task(
         lesson_id           = lesson_id,

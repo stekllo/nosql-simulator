@@ -2,7 +2,7 @@
  * Страница выполнения задания: теория слева, редактор + результат справа.
  * Повторяет дизайн макета Рис. 2.6 из ВКР.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Play, RotateCcw, CheckCircle2, XCircle, Clock, Loader2 } from "lucide-react";
 import Editor, { OnMount } from "@monaco-editor/react";
@@ -12,13 +12,41 @@ import remarkGfm from "remark-gfm";
 
 import { useLessonByTask, useRunQuery, useSubmitQuery } from "@/hooks/useTask";
 import { extractErrorMessage } from "@/lib/api";
-import type { RunResponse, SubmitResponse } from "@/lib/types";
+import type { NoSQLType, RunResponse, SubmitResponse } from "@/lib/types";
 
 
-const STARTER_QUERY = `// Напишите здесь ваш запрос.
+// Стартовый код в редакторе зависит от типа БД задания.
+const STARTER_QUERIES: Record<NoSQLType, string> = {
+  document: `// Напишите здесь ваш запрос.
 // Подсказка для aggregation: $match → $group → $sort → $limit.
 db.orders.find({})
-`;
+`,
+  key_value: `# Напишите здесь Redis-команды (по одной на строку).
+# Каждая строка — отдельная команда. Возвращается результат последней.
+GET key
+`,
+  column: "-- CQL запрос (Cassandra)\nSELECT * FROM table;\n",
+  graph:  "// Cypher запрос (Neo4j)\nMATCH (n) RETURN n LIMIT 10\n",
+  mixed:  "",
+};
+
+// Какой Monaco-язык использовать для подсветки.
+const LANGUAGE_BY_TYPE: Record<NoSQLType, string> = {
+  document:  "javascript",   // MQL похож на JS-объекты
+  key_value: "shell",        // Redis-команды визуально как shell
+  column:    "sql",          // CQL — расширение SQL
+  graph:     "cypher",       // Monaco не знает cypher из коробки → fallback на text
+  mixed:     "plaintext",
+};
+
+// Человеко-читаемая метка БД для бейджа в редакторе.
+const DB_BADGE_LABEL: Record<NoSQLType, string> = {
+  document:  "MongoDB",
+  key_value: "Redis",
+  column:    "Cassandra",
+  graph:     "Neo4j",
+  mixed:     "Mixed",
+};
 
 
 export function TaskPage() {
@@ -29,13 +57,26 @@ export function TaskPage() {
   const run    = useRunQuery(taskIdNum);
   const submit = useSubmitQuery(taskIdNum);
 
-  const [query, setQuery] = useState(STARTER_QUERY);
-
   // Находим именно то задание, которое открыто.
   const task = useMemo(
     () => lesson?.tasks.find((t) => t.task_id === taskIdNum) ?? null,
     [lesson, taskIdNum],
   );
+
+  // Стартовый код подбирается под тип БД (Mongo / Redis / ...).
+  const starterQuery = task ? STARTER_QUERIES[task.db_type] : STARTER_QUERIES.document;
+  const editorLanguage = task ? LANGUAGE_BY_TYPE[task.db_type] : "javascript";
+  const dbBadge = task ? DB_BADGE_LABEL[task.db_type] : "MongoDB";
+
+  const [query, setQuery] = useState("");
+
+  // Когда задание загрузилось — подставляем стартовый код для его типа.
+  useEffect(() => {
+    if (task && query === "") {
+      setQuery(starterQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task]);
 
   const handleEditorMount: OnMount = (ed, monaco) => {
     // Ctrl+Enter → запуск (dry run).
@@ -51,7 +92,7 @@ export function TaskPage() {
   const onRun    = () => run.mutate({ query_text: query });
   const onSubmit = () => submit.mutate({ query_text: query });
   const onReset  = () => {
-    setQuery(STARTER_QUERY);
+    setQuery(starterQuery);
     run.reset();
     submit.reset();
   };
@@ -103,15 +144,19 @@ export function TaskPage() {
         <div className="flex-1 min-h-0 bg-[#1e293b] flex flex-col">
           <div className="flex items-center justify-between border-b border-slate-700 px-4 py-2">
             <div className="flex items-center gap-3">
-              <span className="font-mono text-[11px] text-slate-400 uppercase tracking-wider">query.js</span>
-              <span className="px-1.5 py-0.5 text-[10px] rounded bg-slate-700 text-slate-300 font-mono">MongoDB</span>
+              <span className="font-mono text-[11px] text-slate-400 uppercase tracking-wider">
+                {task?.db_type === "key_value" ? "query.redis" : "query.js"}
+              </span>
+              <span className="px-1.5 py-0.5 text-[10px] rounded bg-slate-700 text-slate-300 font-mono">
+                {dbBadge}
+              </span>
             </div>
             <div className="font-mono text-xs text-slate-500">Ctrl + Enter — запуск</div>
           </div>
 
           <div className="flex-1 min-h-0">
             <Editor
-              language="javascript"
+              language={editorLanguage}
               theme="vs-dark"
               value={query}
               onChange={(v) => setQuery(v ?? "")}
@@ -214,8 +259,8 @@ function ResultPanel({ latest, isSubmit, isPending, error }: ResultPanelProps) {
     );
   }
 
-  // ошибка выполнения
-  if (!latest.ok && !isSubmit) {
+  // ошибка выполнения (только для run, не для submit — у RunResponse есть .ok)
+  if (!isSubmit && "ok" in latest && !latest.ok) {
     return (
       <div className="bg-white border-t border-slate-200 max-h-64 overflow-y-auto">
         <div className="px-5 py-2.5 border-b border-slate-200 bg-rose-50 flex items-center gap-2">

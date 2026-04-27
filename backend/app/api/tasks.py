@@ -1,17 +1,21 @@
-"""Эндпоинты /tasks — получение задания и запуск запросов."""
+"""Эндпоинты /tasks — получение задания и запуск запросов.
+
+После Patch-12 диспатчинг по типу СУБД делается через app.sandbox.dispatch:
+api-слой не знает деталей конкретных runner'ов и одинаково работает с
+MongoDB (document) и Redis (key_value).
+"""
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from motor.motor_asyncio import AsyncIOMotorClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.config import settings
 from app.core.deps import CurrentUser
 from app.db import get_db
 from app.models import Lesson, NoSQLType, Submission, SubmissionStatus, Task
-from app.sandbox.mongo_runner import compare_to_any_reference, execute_mql
+from app.sandbox.dispatch import execute_for_task, is_supported
+from app.sandbox.mongo_runner import compare_to_any_reference
 from app.schemas.course import LessonDetail, TaskBrief
 from app.schemas.submission import RunRequest, RunResponse, SubmitResponse
 
@@ -27,11 +31,11 @@ async def _get_task_or_404(session: AsyncSession, task_id: int) -> Task:
 
 
 def _assert_supported(task: Task) -> None:
-    if task.db_type != NoSQLType.DOCUMENT:
+    if not is_supported(task.db_type):
         raise HTTPException(
             status.HTTP_501_NOT_IMPLEMENTED,
             f"Проверка для {task.db_type.value} будет добавлена позже. "
-            f"Пока поддерживается только MongoDB (document).",
+            f"Пока поддерживаются: MongoDB (document), Redis (key_value).",
         )
 
 
@@ -81,11 +85,7 @@ async def run_query(
     task = await _get_task_or_404(session, task_id)
     _assert_supported(task)
 
-    client = AsyncIOMotorClient(settings.MONGO_URL, serverSelectionTimeoutMS=3000)
-    try:
-        outcome = await execute_mql(client, task.fixture, body.query_text)
-    finally:
-        client.close()
+    outcome = await execute_for_task(task.db_type, task.fixture, body.query_text)
 
     return RunResponse(
         ok          = outcome.ok,
@@ -105,18 +105,15 @@ async def submit_solution(
     task = await _get_task_or_404(session, task_id)
     _assert_supported(task)
 
-    client = AsyncIOMotorClient(settings.MONGO_URL, serverSelectionTimeoutMS=3000)
-    try:
-        # Запускаем запрос студента.
-        student_outcome = await execute_mql(client, task.fixture, body.query_text)
+    # Запускаем запрос студента.
+    student_outcome = await execute_for_task(task.db_type, task.fixture, body.query_text)
 
-        # Запускаем все эталонные решения.
-        reference_outcomes = []
-        for ref_query in task.all_reference_solutions:
-            ref_outcome = await execute_mql(client, task.fixture, ref_query)
-            reference_outcomes.append(ref_outcome)
-    finally:
-        client.close()
+    # Запускаем все эталонные решения (последовательно — не страшно,
+    # их обычно 1-3 штуки).
+    reference_outcomes = []
+    for ref_query in task.all_reference_solutions:
+        ref_outcome = await execute_for_task(task.db_type, task.fixture, ref_query)
+        reference_outcomes.append(ref_outcome)
 
     if not student_outcome.ok:
         status_enum = (

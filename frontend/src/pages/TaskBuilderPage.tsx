@@ -6,7 +6,7 @@
  *  - справа: редактор fixture, основной эталон, дополнительные эталоны (можно добавлять/удалять),
  *            кнопка «Проверить эталон» с preview результата.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import Editor from "@monaco-editor/react";
@@ -26,20 +26,59 @@ interface FormFields {
 }
 
 
-const STARTER_FIXTURE = `{
+// ---------- Стартеры под разные типы СУБД ----------
+//
+// При создании нового задания мы автоматически подставляем заглушки,
+// чтобы препод видел правильный формат fixture / эталона. Когда препод
+// меняет тип СУБД в селекторе — стартеры тоже меняются (если препод
+// ещё не правил поля вручную).
+
+const STARTER_FIXTURES: Record<"document" | "key_value", string> = {
+  document: `{
   "collection": "orders",
   "documents": [
     { "_id": 1, "user_id": "u_001", "status": "paid",      "amount": 100 },
     { "_id": 2, "user_id": "u_001", "status": "paid",      "amount": 250 },
     { "_id": 3, "user_id": "u_002", "status": "cancelled", "amount": 80  }
   ]
-}`;
+}`,
+  key_value: `{
+  "preload": [
+    "SET counter 10",
+    "SET name Anna"
+  ]
+}`,
+};
 
-const STARTER_SOLUTION = `db.orders.aggregate([
+const STARTER_SOLUTIONS: Record<"document" | "key_value", string> = {
+  document: `db.orders.aggregate([
   { $match: { status: "paid" } },
   { $group: { _id: "$user_id", total: { $sum: "$amount" } } },
   { $sort:  { total: -1 } }
-])`;
+])`,
+  key_value: `# Каждая строка — отдельная команда.
+# Возвращается результат последней.
+INCR counter
+GET counter`,
+};
+
+// Какой Monaco-язык подсветки использовать для редактора эталона.
+const SOLUTION_LANGUAGE: Record<NoSQLType, string> = {
+  document:  "javascript",
+  key_value: "shell",
+  column:    "sql",
+  graph:     "plaintext",
+  mixed:     "plaintext",
+};
+
+// Метка СУБД, которая отображается в шапке редактора.
+const DB_LABEL: Record<NoSQLType, string> = {
+  document:  "MongoDB",
+  key_value: "Redis",
+  column:    "Cassandra",
+  graph:     "Neo4j",
+  mixed:     "Mixed",
+};
 
 
 export function TaskBuilderPage() {
@@ -50,14 +89,14 @@ export function TaskBuilderPage() {
   const dryRun     = useReferenceDryRun();
   const createTask = useCreateTask(lessonIdNum);
 
-  const [fixtureText,   setFixtureText]   = useState(STARTER_FIXTURE);
-  const [solutionText,  setSolutionText]  = useState(STARTER_SOLUTION);
+  const [fixtureText,   setFixtureText]   = useState(STARTER_FIXTURES.document);
+  const [solutionText,  setSolutionText]  = useState(STARTER_SOLUTIONS.document);
   // Дополнительные эталоны (могут быть пустыми или несколько штук).
   const [altSolutions,  setAltSolutions]  = useState<string[]>([]);
   const [fixtureError,  setFixtureError]  = useState<string | null>(null);
 
   const {
-    register, handleSubmit, formState: { errors },
+    register, handleSubmit, watch, formState: { errors },
   } = useForm<FormFields>({
     defaultValues: {
       statement:       "",
@@ -67,6 +106,27 @@ export function TaskBuilderPage() {
       compare_ordered: true,
     },
   });
+
+  // Текущий выбранный тип СУБД — нужен для подсветки и подсказок.
+  const dbType = watch("db_type");
+
+  // При смене типа СУБД заменяем стартеры в редакторах,
+  // НО только если препод ещё не правил их вручную (защита от потери работы).
+  // «Не правил» = текст совпадает с одним из известных стартеров.
+  useEffect(() => {
+    if (dbType !== "document" && dbType !== "key_value") return;
+
+    const knownFixtures  = Object.values(STARTER_FIXTURES);
+    const knownSolutions = Object.values(STARTER_SOLUTIONS);
+
+    if (knownFixtures.includes(fixtureText)) {
+      setFixtureText(STARTER_FIXTURES[dbType]);
+    }
+    if (knownSolutions.includes(solutionText)) {
+      setSolutionText(STARTER_SOLUTIONS[dbType]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dbType]);
 
   /** Валидация JSON fixture. */
   const parseFixture = (): Record<string, unknown> | null => {
@@ -170,12 +230,12 @@ export function TaskBuilderPage() {
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded bg-white"
               >
                 <option value="document">MongoDB (document)</option>
-                <option value="key_value" disabled>Redis (key-value) — скоро</option>
+                <option value="key_value">Redis (key-value)</option>
                 <option value="column"    disabled>Cassandra (column) — скоро</option>
                 <option value="graph"     disabled>Neo4j (graph) — скоро</option>
               </select>
               <p className="text-[11px] text-slate-500 mt-1">
-                Пока автоматическая проверка работает только для MongoDB.
+                Автоматическая проверка работает для MongoDB и Redis. Cassandra и Neo4j — скоро.
               </p>
             </div>
 
@@ -232,7 +292,7 @@ export function TaskBuilderPage() {
               <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">
                 Исходные данные (fixture)
               </span>
-              <span className="text-[10px] text-slate-500 font-mono">JSON</span>
+              <span className="text-[10px] text-slate-500 font-mono">JSON · {DB_LABEL[dbType]}</span>
             </div>
             <div className="h-60">
               <Editor
@@ -262,11 +322,11 @@ export function TaskBuilderPage() {
               <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">
                 Эталонное решение
               </span>
-              <span className="text-[10px] text-slate-500 font-mono">MongoDB</span>
+              <span className="text-[10px] text-slate-500 font-mono">{DB_LABEL[dbType]}</span>
             </div>
             <div className="h-64">
               <Editor
-                language="javascript"
+                language={SOLUTION_LANGUAGE[dbType]}
                 theme="vs-dark"
                 value={solutionText}
                 onChange={(v) => setSolutionText(v ?? "")}
@@ -288,7 +348,7 @@ export function TaskBuilderPage() {
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">
                   Альтернативный эталон #{idx + 1}
                 </span>
-                <span className="text-[10px] text-slate-500 font-mono">MongoDB</span>
+                <span className="text-[10px] text-slate-500 font-mono">{DB_LABEL[dbType]}</span>
                 <button
                   type="button"
                   onClick={() => removeAltSolution(idx)}
@@ -300,7 +360,7 @@ export function TaskBuilderPage() {
               </div>
               <div className="h-48">
                 <Editor
-                  language="javascript"
+                  language={SOLUTION_LANGUAGE[dbType]}
                   theme="vs-dark"
                   value={alt}
                   onChange={(v) => updateAltSolution(idx, v ?? "")}

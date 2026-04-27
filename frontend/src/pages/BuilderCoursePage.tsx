@@ -1,6 +1,7 @@
 /**
- * Страница одного курса в конструкторе: дерево модулей/уроков,
- * рядом с каждым уроком — кнопки «Редактировать» и «+ Задание».
+ * Страница одного курса в конструкторе: дерево модулей/уроков/заданий,
+ * рядом с каждым уроком — кнопки «Урок» и «+ Задание»,
+ * под уроком — список заданий с кнопкой «Изменить» у каждого.
  * В шапке каждого модуля — кнопка «+ Урок».
  */
 import { Link, useParams } from "react-router-dom";
@@ -80,45 +81,75 @@ export function BuilderCoursePage() {
 
               <ul className="divide-y divide-slate-100">
                 {m.lessons.map((lesson) => (
-                  <li key={lesson.lesson_id} className="px-5 py-3 flex items-center gap-3">
-                    <BookOpen className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <Link
-                        to={`/builder/lessons/${lesson.lesson_id}/edit`}
-                        className="text-sm font-medium text-slate-900 hover:text-blue-700 truncate block"
-                      >
-                        {lesson.order_num}. {lesson.title}
-                      </Link>
-                      <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5">
-                        {lesson.duration_min != null && (
+                  <li key={lesson.lesson_id} className="px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <BookOpen className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <Link
+                          to={`/builder/lessons/${lesson.lesson_id}/edit`}
+                          className="text-sm font-medium text-slate-900 hover:text-blue-700 truncate block"
+                        >
+                          {lesson.order_num}. {lesson.title}
+                        </Link>
+                        <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5">
+                          {lesson.duration_min != null && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {lesson.duration_min} мин
+                            </span>
+                          )}
                           <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {lesson.duration_min} мин
+                            <FileText className="w-3 h-3" />
+                            {lesson.tasks.length} {lesson.tasks.length === 1 ? "задание" : "заданий"}
                           </span>
-                        )}
-                        <span className="flex items-center gap-1">
-                          <FileText className="w-3 h-3" />
-                          {lesson.task_count} {lesson.task_count === 1 ? "задание" : "заданий"}
-                        </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Link
+                          to={`/builder/lessons/${lesson.lesson_id}/edit`}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded font-medium"
+                          title="Редактировать урок (Markdown)"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Урок
+                        </Link>
+                        <Link
+                          to={`/builder/lessons/${lesson.lesson_id}/tasks/new`}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded font-medium"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Задание
+                        </Link>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Link
-                        to={`/builder/lessons/${lesson.lesson_id}/edit`}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded font-medium"
-                        title="Редактировать урок (Markdown)"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        Урок
-                      </Link>
-                      <Link
-                        to={`/builder/lessons/${lesson.lesson_id}/tasks/new`}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded font-medium"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Задание
-                      </Link>
-                    </div>
+
+                    {/* Список заданий урока (если есть) */}
+                    {lesson.tasks.length > 0 && (
+                      <ul className="mt-2 ml-7 space-y-1">
+                        {lesson.tasks.map((t, idx) => (
+                          <li key={t.task_id}
+                              className="flex items-center gap-2 text-[12px] text-slate-600 group">
+                            <span className="font-mono text-slate-400 flex-shrink-0">
+                              {lesson.order_num}.{idx + 1}
+                            </span>
+                            <span className="flex-1 min-w-0 truncate" title={t.statement}>
+                              {t.statement}
+                            </span>
+                            <span className="flex-shrink-0 text-[10px] text-slate-400">
+                              {t.max_score} б.
+                            </span>
+                            <Link
+                              to={`/builder/tasks/${t.task_id}/edit`}
+                              className="flex-shrink-0 px-2 py-0.5 text-[11px] text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Открыть задание для редактирования (включая эталон)"
+                            >
+                              <Pencil className="w-3 h-3 inline mr-0.5" />
+                              Изменить
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
                 ))}
                 {m.lessons.length === 0 && (

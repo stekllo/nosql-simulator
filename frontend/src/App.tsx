@@ -12,6 +12,7 @@ import { LoginPage }                from "@/pages/LoginPage";
 import { ProfilePage }              from "@/pages/ProfilePage";
 import { RegisterPage }             from "@/pages/RegisterPage";
 import { TaskBuilderPage }          from "@/pages/TaskBuilderPage";
+import { TaskEditorPage }           from "@/pages/TaskEditorPage";
 import { TaskPage }                 from "@/pages/TaskPage";
 import { TeacherStudentDetailPage } from "@/pages/TeacherStudentDetailPage";
 import { TeacherStudentsPage }      from "@/pages/TeacherStudentsPage";
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/builder/lessons/:lessonId/edit"    element={<LessonBuilderPage />} />
         <Route path="/builder/lessons/:lessonId/tasks/new"
                                                          element={<TaskBuilderPage   />} />
+        <Route path="/builder/tasks/:taskId/edit"        element={<TaskEditorPage    />} />
 
         {/* Кабинет преподавателя (backend проверяет teacher/admin) */}
         <Route path="/teacher/students"                  element={<TeacherStudentsPage      />} />

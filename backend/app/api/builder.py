@@ -5,7 +5,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,12 +16,11 @@ from app.models import (
 )
 from app.sandbox.dispatch import execute_for_task, is_supported
 from app.schemas.builder import (
+    BuilderCourseDetail, BuilderLessonBrief, BuilderModuleBrief, BuilderTaskBrief,
     CourseCreate, LessonCreate, LessonUpdate, ModuleCreate,
-    ReferenceDryRun, TaskCreate, TaskOut,
+    ReferenceDryRun, TaskCreate, TaskOut, TaskUpdate,
 )
-from app.schemas.course import (
-    AuthorBrief, CourseBrief, CourseDetail, LessonBrief, ModuleWithLessons,
-)
+from app.schemas.course import CourseBrief
 
 router = APIRouter(dependencies=[Depends(require_role(UserRole.TEACHER, UserRole.ADMIN))])
 
@@ -69,15 +68,20 @@ async def create_course(
 
 # ---------- Полный курс с модулями и уроками (для UI построения дерева) ----------
 
-@router.get("/courses/{course_id}", response_model=CourseDetail)
+@router.get("/courses/{course_id}", response_model=BuilderCourseDetail)
 async def get_course_for_builder(
     course_id: int,
     user:      Annotated[User, Depends(require_role(UserRole.TEACHER, UserRole.ADMIN))],
     session:   Annotated[AsyncSession, Depends(get_db)],
-) -> CourseDetail:
+) -> BuilderCourseDetail:
+    """Полное дерево курса для конструктора: модули → уроки → задания.
+
+    В отличие от студенческой версии, здесь у каждого урока есть список
+    заданий с id и формулировкой — чтобы препод мог открыть любое задание
+    на редактирование прямо из дерева.
+    """
     course_q = await session.execute(
         select(Course)
-        .options(selectinload(Course.author))
         .where(Course.course_id == course_id)
     )
     course = course_q.scalar_one_or_none()
@@ -87,6 +91,8 @@ async def get_course_for_builder(
     if user.role != UserRole.ADMIN and course.author_id != user.user_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Чужой курс нельзя редактировать")
 
+    # Грузим модули с уроками. Задания подгружаем отдельным запросом и
+    # склеиваем по lesson_id — это надёжнее, чем тянуть тройное selectinload.
     modules_q = await session.execute(
         select(Module)
         .options(selectinload(Module.lessons))
@@ -96,36 +102,39 @@ async def get_course_for_builder(
     modules = modules_q.scalars().all()
 
     lesson_ids = [l.lesson_id for m in modules for l in m.lessons]
-    task_counts: dict[int, int] = {}
+    tasks_by_lesson: dict[int, list[Task]] = {}
     if lesson_ids:
-        counts_q = await session.execute(
-            select(Task.lesson_id, func.count(Task.task_id))
+        tasks_q = await session.execute(
+            select(Task)
             .where(Task.lesson_id.in_(lesson_ids))
-            .group_by(Task.lesson_id)
+            .order_by(Task.task_id)
         )
-        task_counts = dict(counts_q.all())
+        for t in tasks_q.scalars().all():
+            tasks_by_lesson.setdefault(t.lesson_id, []).append(t)
 
-    return CourseDetail(
+    return BuilderCourseDetail(
         course_id   = course.course_id,
         title       = course.title,
         description = course.description,
         nosql_type  = course.nosql_type,
         difficulty  = course.difficulty,
         created_at  = course.created_at,
-        author      = AuthorBrief.model_validate(course.author),
         modules     = [
-            ModuleWithLessons(
+            BuilderModuleBrief(
                 module_id   = m.module_id,
                 title       = m.title,
                 description = m.description,
                 order_num   = m.order_num,
                 lessons     = [
-                    LessonBrief(
+                    BuilderLessonBrief(
                         lesson_id    = l.lesson_id,
                         title        = l.title,
                         order_num    = l.order_num,
                         duration_min = l.duration_min,
-                        task_count   = task_counts.get(l.lesson_id, 0),
+                        tasks        = [
+                            BuilderTaskBrief.model_validate(t)
+                            for t in tasks_by_lesson.get(l.lesson_id, [])
+                        ],
                     )
                     for l in sorted(m.lessons, key=lambda x: x.order_num)
                 ],
@@ -437,12 +446,17 @@ async def create_task(
     return TaskOut.model_validate(task)
 
 
-@router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_task(
-    task_id: int,
-    user:    Annotated[User, Depends(require_role(UserRole.TEACHER, UserRole.ADMIN))],
-    session: Annotated[AsyncSession, Depends(get_db)],
-):
+async def _get_task_with_course_or_404(
+    session:   AsyncSession,
+    task_id:   int,
+    user:      User,
+) -> tuple[Task, Course]:
+    """Возвращает задание + курс с проверкой авторства.
+
+    Используется в GET/PATCH/DELETE задания — там одинаковая логика:
+    задание должно существовать, и пользователь должен быть либо автором
+    курса, либо админом.
+    """
     task_q = await session.execute(
         select(Task)
         .options(selectinload(Task.lesson).selectinload(Lesson.module).selectinload(Module.course))
@@ -456,5 +470,89 @@ async def delete_task(
     if user.role != UserRole.ADMIN and course.author_id != user.user_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Чужое задание")
 
+    return task, course
+
+
+@router.get("/tasks/{task_id}", response_model=TaskOut)
+async def get_task_for_edit(
+    task_id: int,
+    user:    Annotated[User, Depends(require_role(UserRole.TEACHER, UserRole.ADMIN))],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> TaskOut:
+    """Возвращает полный вид задания (с эталоном) для редактирования.
+
+    В отличие от студенческого `/tasks/{task_id}` (который скрывает эталон),
+    этот эндпоинт отдаёт всё — потому что доступен только автору курса.
+    """
+    task, _course = await _get_task_with_course_or_404(session, task_id, user)
+    return TaskOut.model_validate(task)
+
+
+@router.patch("/tasks/{task_id}", response_model=TaskOut)
+async def update_task(
+    task_id: int,
+    body:    TaskUpdate,
+    user:    Annotated[User, Depends(require_role(UserRole.TEACHER, UserRole.ADMIN))],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> TaskOut:
+    """Обновление задания. Применяются только переданные поля.
+
+    `db_type` менять нельзя — для смены типа нужно удалить и создать заново.
+    """
+    task, _course = await _get_task_with_course_or_404(session, task_id, user)
+
+    # Применяем только те поля, которые реально были переданы (не None).
+    if body.statement is not None:
+        task.statement = body.statement
+    if body.fixture is not None:
+        # Валидация формата fixture по типу СУБД (как в create_task).
+        if task.db_type == NoSQLType.DOCUMENT:
+            if "collection" not in body.fixture or "documents" not in body.fixture:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    'Fixture для MongoDB должен содержать поля "collection" и "documents"',
+                )
+            if not isinstance(body.fixture["documents"], list):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    '"documents" должен быть массивом',
+                )
+        if task.db_type == NoSQLType.KEY_VALUE:
+            preload = body.fixture.get("preload", [])
+            if not isinstance(preload, list):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    'Fixture для Redis: поле "preload" должно быть массивом строк-команд',
+                )
+            for cmd in preload:
+                if not isinstance(cmd, str):
+                    raise HTTPException(
+                        status.HTTP_400_BAD_REQUEST,
+                        'Fixture для Redis: каждая команда в "preload" должна быть строкой',
+                    )
+        task.fixture = body.fixture
+    if body.reference_solution is not None:
+        task.reference_solution = body.reference_solution
+    if body.reference_solutions is not None:
+        task.reference_solutions = body.reference_solutions
+    if body.compare_ordered is not None:
+        task.compare_ordered = body.compare_ordered
+    if body.max_score is not None:
+        task.max_score = body.max_score
+    if body.attempts_limit is not None:
+        task.attempts_limit = body.attempts_limit
+
+    await session.commit()
+    await session.refresh(task)
+    return TaskOut.model_validate(task)
+
+
+@router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(
+    task_id: int,
+    user:    Annotated[User, Depends(require_role(UserRole.TEACHER, UserRole.ADMIN))],
+    session: Annotated[AsyncSession, Depends(get_db)],
+):
+    task, _course = await _get_task_with_course_or_404(session, task_id, user)
     await session.delete(task)
     await session.commit()

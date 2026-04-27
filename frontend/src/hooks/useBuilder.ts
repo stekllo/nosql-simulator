@@ -3,8 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import type {
-  CourseBrief, CourseDetail, LessonCreatePayload, LessonForEdit,
-  LessonUpdatePayload, ReferenceDryRun, TaskCreate, TaskOut,
+  BuilderCourseDetail, CourseBrief, LessonCreatePayload, LessonForEdit,
+  LessonUpdatePayload, ReferenceDryRun, TaskCreate, TaskOut, TaskUpdatePayload,
 } from "@/lib/types";
 
 
@@ -25,10 +25,10 @@ export function useMyCourses() {
 
 export function useBuilderCourse(courseId: number | string | undefined) {
   const id = Number(courseId);
-  return useQuery<CourseDetail>({
+  return useQuery<BuilderCourseDetail>({
     queryKey: ["builder", "course", id],
     queryFn: async () => {
-      const { data } = await api.get<CourseDetail>(`/builder/courses/${id}`);
+      const { data } = await api.get<BuilderCourseDetail>(`/builder/courses/${id}`);
       return data;
     },
     enabled: Number.isFinite(id) && id > 0,
@@ -128,6 +128,60 @@ export function useCreateTask(lessonId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["builder"] });
       qc.invalidateQueries({ queryKey: ["courses"] });
+    },
+  });
+}
+
+
+// ---------- Задание: получить полное содержимое (с эталоном) ----------
+
+export function useTaskForEdit(taskId: number | string | undefined) {
+  const id = Number(taskId);
+  return useQuery<TaskOut>({
+    queryKey: ["builder", "task", id],
+    queryFn: async () => {
+      const { data } = await api.get<TaskOut>(`/builder/tasks/${id}`);
+      return data;
+    },
+    enabled: Number.isFinite(id) && id > 0,
+  });
+}
+
+
+// ---------- Задание: обновить ----------
+
+export function useUpdateTask(taskId: number) {
+  const qc = useQueryClient();
+  return useMutation<TaskOut, unknown, TaskUpdatePayload>({
+    mutationFn: async (body) => {
+      const { data } = await api.patch<TaskOut>(`/builder/tasks/${taskId}`, body);
+      return data;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["builder", "task", taskId] });
+      qc.invalidateQueries({ queryKey: ["builder", "course"] });
+      qc.invalidateQueries({ queryKey: ["courses"] });
+      // Кэш урока (LessonPage) тоже инвалидируем — там показываются задания.
+      qc.invalidateQueries({ queryKey: ["lesson"] });
+      // task — тоже
+      qc.invalidateQueries({ queryKey: ["task", data.task_id] });
+    },
+  });
+}
+
+
+// ---------- Задание: удалить ----------
+
+export function useDeleteTask() {
+  const qc = useQueryClient();
+  return useMutation<void, unknown, number>({
+    mutationFn: async (taskId) => {
+      await api.delete(`/builder/tasks/${taskId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["builder"] });
+      qc.invalidateQueries({ queryKey: ["courses"] });
+      qc.invalidateQueries({ queryKey: ["lesson"] });
     },
   });
 }

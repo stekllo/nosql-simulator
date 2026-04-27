@@ -84,6 +84,42 @@ export interface LessonDetail {
 }
 
 
+// ---------- Билдерское дерево курса (со списком заданий внутри уроков) ----------
+
+export interface BuilderTaskBrief {
+  task_id:    number;
+  statement:  string;
+  db_type:    NoSQLType;
+  max_score:  number;
+}
+
+export interface BuilderLessonBrief {
+  lesson_id:    number;
+  title:        string;
+  order_num:    number;
+  duration_min: number | null;
+  tasks:        BuilderTaskBrief[];
+}
+
+export interface BuilderModuleBrief {
+  module_id:   number;
+  title:       string;
+  description: string | null;
+  order_num:   number;
+  lessons:     BuilderLessonBrief[];
+}
+
+export interface BuilderCourseDetail {
+  course_id:   number;
+  title:       string;
+  description: string | null;
+  nosql_type:  NoSQLType;
+  difficulty:  number | null;
+  created_at:  string;
+  modules:     BuilderModuleBrief[];
+}
+
+
 // ---------- Запуск и проверка заданий ----------
 
 export interface RunRequest {
@@ -189,6 +225,18 @@ export interface TaskOut {
   compare_ordered:     boolean;
   max_score:           number;
   attempts_limit:      number;
+}
+
+/** Пейлоад для обновления задания (PATCH /builder/tasks/{id}).
+ *  db_type намеренно отсутствует — менять тип задания после создания нельзя. */
+export interface TaskUpdatePayload {
+  statement?:           string;
+  fixture?:             Record<string, unknown>;
+  reference_solution?:  string;
+  reference_solutions?: string[];
+  compare_ordered?:     boolean;
+  max_score?:           number;
+  attempts_limit?:      number;
 }
 
 export interface ReferenceDryRun {

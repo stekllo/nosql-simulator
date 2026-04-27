@@ -1606,26 +1606,167 @@ CASSANDRA_COURSE = {
     "nosql_type":  NoSQLType.COLUMN,
     "difficulty":  4,
     "modules": [
-        {
-            "title":       "Модуль 1. Архитектура Cassandra",
-            "description": "Шардирование, репликация, кворумы.",
-            "lessons": [
-                {
-                    "title":        "Кольцевая архитектура",
-                    "duration_min": 12,
-                    "content_md": """# Архитектура Cassandra
 
-Cassandra использует **peer-to-peer** архитектуру: все узлы равноправны, нет ведущего и ведомого. Данные распределяются по узлам с помощью консистентного хэширования.
+        {
+            "title":       "Модуль 1. Введение в Cassandra и CQL",
+            "description": "Колоночная модель данных, базовые команды CQL.",
+            "lessons": [
+
+                # ---- Урок 1.1: теория без задания ----
+                {
+                    "title":        "Что такое Cassandra",
+                    "duration_min": 10,
+                    "content_md": """# Что такое Apache Cassandra
+
+**Apache Cassandra** — распределённая NoSQL-база данных, спроектированная для линейного горизонтального масштабирования и высокой доступности. Изначально создавалась в Facebook для системы поиска по сообщениям, позже стала open-source проектом Apache.
 
 ## Ключевые свойства
 
-- Линейное горизонтальное масштабирование
-- Tunable consistency (настраиваемая согласованность)
-- Без единой точки отказа
-- Оптимизирована для больших объёмов записи
+- **Peer-to-peer архитектура** — все узлы равноправны, нет ведущего/ведомого. Любой узел может принять запрос.
+- **Линейное масштабирование** — добавление узлов увеличивает пропускную способность пропорционально, без перекройки данных.
+- **Tunable consistency** — для каждого запроса можно выбрать уровень согласованности: от ONE (быстро, но возможна устаревшая запись) до ALL (медленно, но гарантия).
+- **Оптимизирована под запись** — структура SSTable + memtable делает запись очень быстрой.
+- **Без единой точки отказа** — выход одного узла не останавливает кластер.
 
-> **Скоро:** интерактивная Cassandra-песочница с CQL-запросами. Пока курс находится в разработке.
+## Когда использовать
+
+Cassandra хороша для нагрузок, где:
+
+- Объём данных огромен (террабайты-петабайты)
+- Запись преобладает над чтением, либо чтение идёт по простым ключам
+- Нужна высокая доступность (ритейл, IoT, мониторинг, временные ряды, метрики)
+- Можно простить eventual consistency
+
+Плохо подходит для сложных аналитических запросов с JOIN'ами, агрегациями по произвольным полям, транзакций. Эту нишу занимают реляционные БД и ClickHouse.
+
+## CQL — язык запросов
+
+Cassandra Query Language (CQL) синтаксически похож на SQL: те же `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE TABLE`. Но **семантика принципиально другая**: нет JOIN'ов, нет группировки по произвольным полям, фильтр должен использовать ключи таблицы.
+
+### Пример
+
+```cql
+-- Создаём таблицу
+CREATE TABLE users (
+    user_id int PRIMARY KEY,
+    name text,
+    email text
+);
+
+-- Вставляем данные
+INSERT INTO users (user_id, name, email) VALUES (1, 'Anna', 'anna@example.com');
+
+-- Читаем
+SELECT * FROM users WHERE user_id = 1;
+```
+
+> Cassandra проектировалась с принципом **"запрос определяет схему"**: сначала ты понимаешь, какие запросы тебе нужны, и под них строишь таблицы. В реляционных БД наоборот — схема первична, запросы пишутся как угодно.
+
+В следующем уроке мы создадим первую таблицу и сделаем простые SELECT/INSERT.
 """,
+                },
+
+                # ---- Урок 1.2: первое задание ----
+                {
+                    "title":        "Первая таблица: CREATE, INSERT, SELECT",
+                    "duration_min": 12,
+                    "content_md": """# Создание таблицы и работа с данными
+
+В этом уроке создадим простую таблицу и научимся вставлять и читать данные.
+
+## CREATE TABLE — синтаксис
+
+```cql
+CREATE TABLE table_name (
+    column1 type1,
+    column2 type2,
+    ...
+    PRIMARY KEY (column1)
+);
+```
+
+Можно объявить первичный ключ inline: `column1 type1 PRIMARY KEY`.
+
+## Базовые типы CQL
+
+| Тип       | Что хранит                     |
+|-----------|--------------------------------|
+| `int`     | 32-битное целое                |
+| `bigint`  | 64-битное целое                |
+| `text`    | Строка UTF-8                   |
+| `boolean` | true/false                     |
+| `uuid`    | UUID                           |
+| `timestamp` | Дата+время                   |
+| `decimal` | Точное десятичное число        |
+| `float`, `double` | Числа с плавающей точкой |
+
+Также есть коллекции — `set<T>`, `list<T>`, `map<K, V>`. Их разберём в одном из следующих уроков.
+
+## INSERT
+
+```cql
+INSERT INTO users (user_id, name, email) VALUES (1, 'Anna', 'anna@example.com');
+```
+
+Если ключ совпадает с уже существующим — данные **перезаписываются** (upsert). В Cassandra нет такого понятия, как «нарушение уникального ключа».
+
+## SELECT
+
+```cql
+SELECT * FROM users;                    -- все строки, все колонки
+SELECT name, email FROM users;          -- только указанные колонки
+SELECT * FROM users WHERE user_id = 1;  -- по партиционному ключу
+```
+
+Важная особенность Cassandra: фильтр в `WHERE` обычно должен использовать партиционный ключ. Иначе нужно `ALLOW FILTERING`, что Cassandra делать не любит и ругается.
+
+## Песочница в этом курсе
+
+В песочнице автоматически создаётся свежий keyspace перед каждой проверкой и удаляется после. Это значит:
+
+- **Не нужно** писать `CREATE KEYSPACE` или `USE` — keyspace уже выбран.
+- **Каждый запуск изолирован** — данные одной проверки не попадут в другую.
+- Можешь спокойно писать `CREATE TABLE`, `INSERT`, `SELECT` — всё в свежем окружении.
+
+## Практическое задание
+
+Под этим уроком — задание: создать таблицу, вставить три строки, прочитать одну по ключу.
+""",
+                    "tasks": [
+                        {
+                            "statement": (
+                                "Создайте таблицу `users` с колонками `user_id` (int, "
+                                "первичный ключ), `name` (text), `email` (text). "
+                                "Вставьте трёх пользователей: (1, Anna, anna@example.com), "
+                                "(2, Bob, bob@example.com), (3, Carol, carol@example.com). "
+                                "Затем вернитe пользователя с user_id = 2 командой SELECT."
+                            ),
+                            "fixture": {
+                                # Пустой preload — студент сам создаёт таблицу.
+                                # Это первое задание, и хочется показать полный путь
+                                # CREATE → INSERT → SELECT.
+                                "preload": [],
+                            },
+                            "reference_solution": (
+                                "CREATE TABLE users (user_id int PRIMARY KEY, name text, email text);\n"
+                                "INSERT INTO users (user_id, name, email) VALUES (1, 'Anna', 'anna@example.com');\n"
+                                "INSERT INTO users (user_id, name, email) VALUES (2, 'Bob', 'bob@example.com');\n"
+                                "INSERT INTO users (user_id, name, email) VALUES (3, 'Carol', 'carol@example.com');\n"
+                                "SELECT * FROM users WHERE user_id = 2;"
+                            ),
+                            "reference_solutions": [
+                                # Альтернативный синтаксис: PRIMARY KEY как отдельная строка
+                                "CREATE TABLE users (user_id int, name text, email text, PRIMARY KEY (user_id));\n"
+                                "INSERT INTO users (user_id, name, email) VALUES (1, 'Anna', 'anna@example.com');\n"
+                                "INSERT INTO users (user_id, name, email) VALUES (2, 'Bob', 'bob@example.com');\n"
+                                "INSERT INTO users (user_id, name, email) VALUES (3, 'Carol', 'carol@example.com');\n"
+                                "SELECT * FROM users WHERE user_id = 2;",
+                            ],
+                            "compare_ordered": False,  # одна строка — порядок не важен
+                            "max_score":      10,
+                            "attempts_limit":  0,
+                        },
+                    ],
                 },
             ],
         },
@@ -1722,7 +1863,9 @@ async def seed_student_activity(
         return 0
 
     tasks_q = await session.execute(
-        select(Task).where(Task.db_type.in_([NoSQLType.DOCUMENT, NoSQLType.KEY_VALUE]))
+        select(Task).where(Task.db_type.in_([
+            NoSQLType.DOCUMENT, NoSQLType.KEY_VALUE, NoSQLType.COLUMN,
+        ]))
     )
     tasks = list(tasks_q.scalars().all())
     if not tasks:
@@ -1734,6 +1877,7 @@ async def seed_student_activity(
     WRONG_QUERY_BY_TYPE = {
         NoSQLType.DOCUMENT:  "db.users.find({})",
         NoSQLType.KEY_VALUE: "GET nonexistent_key",
+        NoSQLType.COLUMN:    "SELECT * FROM nonexistent_table;",
     }
 
     now = datetime.now()  # naive — БД хранит timestamp WITHOUT TIME ZONE

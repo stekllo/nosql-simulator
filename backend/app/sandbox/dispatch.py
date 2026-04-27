@@ -14,13 +14,20 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.core.config import settings
 from app.models import NoSQLType
+from app.sandbox.cassandra_runner import ExecutionResult as CassandraResult
+from app.sandbox.cassandra_runner import execute_cql_script
 from app.sandbox.mongo_runner import ExecutionResult as MongoResult
 from app.sandbox.mongo_runner import execute_mql
 from app.sandbox.redis_runner import ExecutionResult as RedisResult
 from app.sandbox.redis_runner import execute_redis_script
 
-# Универсальный тип результата (структуры идентичны, см. оба модуля).
-SandboxResult = MongoResult | RedisResult
+# Универсальный тип результата (структуры идентичны, см. модули runner'ов).
+SandboxResult = MongoResult | RedisResult | CassandraResult
+
+
+# Cassandra использует стандартный native-protocol порт.
+# Если когда-нибудь понадобится менять — добавим settings.CASSANDRA_PORT.
+CASSANDRA_PORT = 9042
 
 
 async def execute_for_task(
@@ -30,8 +37,9 @@ async def execute_for_task(
 ) -> SandboxResult:
     """Выполняет запрос в соответствующей песочнице.
 
-    Для DOCUMENT (MongoDB) — Motor + сами создаём/удаляем DB.
+    Для DOCUMENT (MongoDB) — Motor + ephemeral database.
     Для KEY_VALUE (Redis) — redis-py async + FLUSHDB до/после.
+    Для COLUMN (Cassandra) — cassandra-driver + ephemeral keyspace.
     Остальные типы пока не реализованы (501).
     """
     if db_type == NoSQLType.DOCUMENT:
@@ -48,7 +56,15 @@ async def execute_for_task(
             query_text,
         )
 
-    # COLUMN / GRAPH / MIXED — пока нет.
+    if db_type == NoSQLType.COLUMN:
+        return await execute_cql_script(
+            cluster_hosts=[settings.CASSANDRA_HOST],
+            cluster_port=CASSANDRA_PORT,
+            fixture=fixture,
+            query_text=query_text,
+        )
+
+    # GRAPH / MIXED — пока нет.
     raise NotImplementedError(
         f"Runner для типа {db_type.value!r} ещё не реализован"
     )
@@ -56,4 +72,4 @@ async def execute_for_task(
 
 def is_supported(db_type: NoSQLType) -> bool:
     """True, если для этого типа есть runner."""
-    return db_type in (NoSQLType.DOCUMENT, NoSQLType.KEY_VALUE)
+    return db_type in (NoSQLType.DOCUMENT, NoSQLType.KEY_VALUE, NoSQLType.COLUMN)

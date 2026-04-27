@@ -33,7 +33,7 @@ interface FormFields {
 // меняет тип СУБД в селекторе — стартеры тоже меняются (если препод
 // ещё не правил поля вручную).
 
-const STARTER_FIXTURES: Record<"document" | "key_value", string> = {
+const STARTER_FIXTURES: Record<"document" | "key_value" | "column", string> = {
   document: `{
   "collection": "orders",
   "documents": [
@@ -48,9 +48,16 @@ const STARTER_FIXTURES: Record<"document" | "key_value", string> = {
     "SET name Anna"
   ]
 }`,
+  column: `{
+  "preload": [
+    "CREATE TABLE users (user_id int PRIMARY KEY, name text);",
+    "INSERT INTO users (user_id, name) VALUES (1, 'Anna');",
+    "INSERT INTO users (user_id, name) VALUES (2, 'Bob');"
+  ]
+}`,
 };
 
-const STARTER_SOLUTIONS: Record<"document" | "key_value", string> = {
+const STARTER_SOLUTIONS: Record<"document" | "key_value" | "column", string> = {
   document: `db.orders.aggregate([
   { $match: { status: "paid" } },
   { $group: { _id: "$user_id", total: { $sum: "$amount" } } },
@@ -60,6 +67,9 @@ const STARTER_SOLUTIONS: Record<"document" | "key_value", string> = {
 # Возвращается результат последней.
 INCR counter
 GET counter`,
+  column: `-- Каждая строка/блок до ; — одна команда.
+-- Возвращается результат последней.
+SELECT * FROM users WHERE user_id = 1;`,
 };
 
 // Какой Monaco-язык подсветки использовать для редактора эталона.
@@ -114,7 +124,7 @@ export function TaskBuilderPage() {
   // НО только если препод ещё не правил их вручную (защита от потери работы).
   // «Не правил» = текст совпадает с одним из известных стартеров.
   useEffect(() => {
-    if (dbType !== "document" && dbType !== "key_value") return;
+    if (dbType !== "document" && dbType !== "key_value" && dbType !== "column") return;
 
     const knownFixtures  = Object.values(STARTER_FIXTURES);
     const knownSolutions = Object.values(STARTER_SOLUTIONS);
@@ -231,11 +241,11 @@ export function TaskBuilderPage() {
               >
                 <option value="document">MongoDB (document)</option>
                 <option value="key_value">Redis (key-value)</option>
-                <option value="column"    disabled>Cassandra (column) — скоро</option>
+                <option value="column">Cassandra (column)</option>
                 <option value="graph"     disabled>Neo4j (graph) — скоро</option>
               </select>
               <p className="text-[11px] text-slate-500 mt-1">
-                Автоматическая проверка работает для MongoDB и Redis. Cassandra и Neo4j — скоро.
+                Автоматическая проверка работает для MongoDB, Redis и Cassandra. Neo4j — скоро.
               </p>
             </div>
 

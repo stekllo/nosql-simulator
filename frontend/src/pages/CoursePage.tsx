@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { Clock, FileText, ChevronRight } from "lucide-react";
+import { Clock, FileText, ChevronRight, CheckCircle2, Circle } from "lucide-react";
 
 import { useCourse } from "@/hooks/useCourses";
 import { nosqlTypeBadge, nosqlTypeLabel } from "@/lib/nosqlType";
@@ -57,6 +57,40 @@ export function CoursePage() {
           <span>•</span>
           <span>{totalTasks} заданий</span>
         </div>
+
+        {/* Прогресс-бар */}
+        {course.progress && course.progress.lessons_total > 0 && (
+          <div className="mt-5 bg-white border border-slate-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-medium text-slate-900">
+                Ваш прогресс
+              </div>
+              <div className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">{course.progress.lessons_completed}</span>
+                <span className="text-slate-500"> / {course.progress.lessons_total} уроков</span>
+                {course.progress.tasks_total > 0 && (
+                  <span className="text-slate-400 ml-3">
+                    {course.progress.tasks_solved} / {course.progress.tasks_total} заданий
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className={
+                  "h-full rounded-full transition-all duration-500 " +
+                  (course.progress.percent === 100 ? "bg-emerald-500" : "bg-blue-500")
+                }
+                style={{ width: `${course.progress.percent}%` }}
+              />
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1.5">
+              {course.progress.percent === 100
+                ? "🎉 Курс пройден полностью"
+                : `${course.progress.percent}% курса пройдено`}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Модули */}
@@ -83,11 +117,20 @@ export function CoursePage() {
                     to={`/lessons/${lesson.lesson_id}`}
                     className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50 transition-colors"
                   >
+                    {/* Иконка прогресса вместо номера + сам номер маленьким текстом */}
+                    {lesson.is_completed ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                    ) : (
+                      <Circle className="w-5 h-5 text-slate-300 flex-shrink-0" />
+                    )}
                     <span className="text-xs font-mono text-slate-400 w-6 text-right">
                       {lesson.order_num}.
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-slate-900 truncate">
+                      <div className={
+                        "text-sm font-medium truncate " +
+                        (lesson.is_completed ? "text-slate-600" : "text-slate-900")
+                      }>
                         {lesson.title}
                       </div>
                       <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5">

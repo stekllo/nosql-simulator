@@ -36,6 +36,15 @@ export interface AuthorBrief {
   display_name: string | null;
 }
 
+/** Прогресс конкретного пользователя по курсу. */
+export interface CourseProgress {
+  lessons_completed: number;
+  lessons_total:     number;
+  tasks_solved:      number;
+  tasks_total:       number;
+  percent:           number;
+}
+
 export interface CourseBrief {
   course_id:   number;
   title:       string;
@@ -44,6 +53,8 @@ export interface CourseBrief {
   difficulty:  number | null;
   created_at:  string;
   author:      AuthorBrief;
+  /** Прогресс текущего пользователя. null если в курсе вообще нет уроков. */
+  progress:    CourseProgress | null;
 }
 
 export interface LessonBrief {
@@ -52,6 +63,8 @@ export interface LessonBrief {
   order_num:    number;
   duration_min: number | null;
   task_count:   number;
+  /** Урок пройден: все задания решены или у урока нет заданий. */
+  is_completed: boolean;
 }
 
 export interface ModuleWithLessons {
@@ -71,6 +84,8 @@ export interface TaskBrief {
   statement: string;
   db_type:   NoSQLType;
   max_score: number;
+  /** Решено ли это задание текущим пользователем (есть CORRECT submission). */
+  is_solved: boolean;
 }
 
 export interface LessonDetail {

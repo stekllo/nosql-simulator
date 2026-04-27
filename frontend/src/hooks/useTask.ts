@@ -1,5 +1,5 @@
 /** Hooks для /tasks эндпоинтов. */
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import type {
@@ -17,10 +17,23 @@ export function useRunQuery(taskId: number) {
 }
 
 export function useSubmitQuery(taskId: number) {
+  const qc = useQueryClient();
   return useMutation<SubmitResponse, unknown, RunRequest>({
     mutationFn: async (body) => {
       const { data } = await api.post<SubmitResponse>(`/tasks/${taskId}/submit`, body);
       return data;
+    },
+    onSuccess: (data) => {
+      // Если задание стало решённым правильно — обновляем кэши,
+      // чтобы прогресс и галочки на CoursePage / LessonPage / HomePage
+      // отрисовались без необходимости перезагрузки.
+      if (data.is_correct === true) {
+        qc.invalidateQueries({ queryKey: ["courses"]   });
+        qc.invalidateQueries({ queryKey: ["lessons"]   });
+        qc.invalidateQueries({ queryKey: ["lesson-by-task"] });
+        // Дашборд тоже зависит от submissions.
+        qc.invalidateQueries({ queryKey: ["dashboard"] });
+      }
     },
   });
 }

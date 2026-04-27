@@ -6,6 +6,7 @@ import { BuilderPage }              from "@/pages/BuilderPage";
 import { CoursePage }               from "@/pages/CoursePage";
 import { DashboardPage }            from "@/pages/DashboardPage";
 import { HomePage }                 from "@/pages/HomePage";
+import { LessonBuilderPage }        from "@/pages/LessonBuilderPage";
 import { LessonPage }               from "@/pages/LessonPage";
 import { LoginPage }                from "@/pages/LoginPage";
 import { ProfilePage }              from "@/pages/ProfilePage";
@@ -40,6 +41,9 @@ export default function App() {
         {/* Конструктор (backend сам проверяет роль teacher/admin через 403) */}
         <Route path="/builder"                           element={<BuilderPage       />} />
         <Route path="/builder/courses/:courseId"         element={<BuilderCoursePage />} />
+        <Route path="/builder/modules/:moduleId/lessons/new"
+                                                         element={<LessonBuilderPage />} />
+        <Route path="/builder/lessons/:lessonId/edit"    element={<LessonBuilderPage />} />
         <Route path="/builder/lessons/:lessonId/tasks/new"
                                                          element={<TaskBuilderPage   />} />
 

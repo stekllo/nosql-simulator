@@ -199,6 +199,36 @@ export interface ReferenceDryRun {
 }
 
 
+// ---------- Конструктор уроков ----------
+
+/** Полный вид урока для редактирования (GET /builder/lessons/{id}). */
+export interface LessonForEdit {
+  lesson_id:    number;
+  module_id:    number;
+  course_id:    number;
+  title:        string;
+  content_md:   string;
+  order_num:    number;
+  duration_min: number | null;
+}
+
+/** Пейлоад для создания урока (POST /builder/modules/{id}/lessons). */
+export interface LessonCreatePayload {
+  title:         string;
+  content_md:    string;
+  order_num:     number;
+  duration_min?: number | null;
+}
+
+/** Пейлоад для обновления урока (PATCH /builder/lessons/{id}). */
+export interface LessonUpdatePayload {
+  title?:        string;
+  content_md?:   string;
+  order_num?:    number;
+  duration_min?: number | null;
+}
+
+
 // ---------- Кабинет преподавателя ----------
 
 export interface StudentBrief {

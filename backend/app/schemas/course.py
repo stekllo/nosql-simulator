@@ -108,3 +108,16 @@ class LessonDetail(BaseModel):
     order_num:    int
     duration_min: int | None
     tasks:        list[TaskBrief]
+    # Урок пройден текущим пользователем (для подсветки кнопки «Дальше»).
+    is_completed:   bool = False
+    # ID следующего урока в курсе (для перехода по «Дальше →»).
+    # None если этот урок последний.
+    next_lesson_id: int | None = None
+
+
+class LessonCompletionResponse(BaseModel):
+    """Ответ на POST /lessons/{id}/complete."""
+    lesson_id:         int
+    # True если урок уже был отмечен раньше (повторный клик).
+    # False если запись только что создана.
+    already_completed: bool

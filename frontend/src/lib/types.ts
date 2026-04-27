@@ -96,6 +96,16 @@ export interface LessonDetail {
   order_num:    number;
   duration_min: number | null;
   tasks:        TaskBrief[];
+  /** Урок пройден текущим пользователем. */
+  is_completed: boolean;
+  /** ID следующего урока в курсе, либо null если этот — последний. */
+  next_lesson_id: number | null;
+}
+
+export interface LessonCompletionResponse {
+  lesson_id:         number;
+  /** True — повторный клик; false — отметка только что создана. */
+  already_completed: boolean;
 }
 
 

@@ -1,9 +1,9 @@
 /** React Query hooks для эндпоинтов /courses. */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import type {
-  CourseBrief, CourseDetail, LessonDetail, NoSQLType,
+  CourseBrief, CourseDetail, LessonCompletionResponse, LessonDetail, NoSQLType,
 } from "@/lib/types";
 
 
@@ -60,5 +60,32 @@ export function useLesson(lessonId: number | string | undefined) {
       return data;
     },
     enabled: Number.isFinite(id) && id > 0,
+  });
+}
+
+
+// ---------- Отметка урока как пройденного ----------
+
+/**
+ * Отмечает урок как пройденный для текущего пользователя.
+ * Идемпотентно — повторный вызов не ошибка, просто already_completed=true.
+ *
+ * Используется на странице урока: при клике «Дальше →» сначала шлём POST,
+ * потом переходим на следующий урок.
+ */
+export function useCompleteLesson() {
+  const qc = useQueryClient();
+  return useMutation<LessonCompletionResponse, unknown, number>({
+    mutationFn: async (lessonId) => {
+      const { data } = await api.post<LessonCompletionResponse>(
+        `/courses/lessons/${lessonId}/complete`,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      // Прогресс на каталоге, странице курса и текущем уроке.
+      qc.invalidateQueries({ queryKey: ["courses"] });
+      qc.invalidateQueries({ queryKey: ["lessons"] });
+    },
   });
 }

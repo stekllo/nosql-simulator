@@ -4,7 +4,9 @@
 их все при автогенерации миграций.
 """
 from app.models.achievement import Achievement, UserAchievement
-from app.models.course import Course, Lesson, Module, NoSQLType, Progress, ProgressStatus
+from app.models.course import (
+    Course, Lesson, LessonCompletion, Module, NoSQLType, Progress, ProgressStatus,
+)
 from app.models.submission import Submission, SubmissionStatus, Task
 from app.models.user import User, UserRole
 
@@ -12,6 +14,7 @@ __all__ = [
     "Achievement",
     "Course",
     "Lesson",
+    "LessonCompletion",
     "Module",
     "NoSQLType",
     "Progress",
@@ -20,7 +23,6 @@ __all__ = [
     "SubmissionStatus",
     "Task",
     "User",
-    "UserAchievement",
     "UserAchievement",
     "UserRole",
 ]

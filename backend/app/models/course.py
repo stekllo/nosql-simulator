@@ -152,3 +152,33 @@ class Progress(Base):
     course: Mapped["Course"] = relationship(back_populates="progresses")
 
     __table_args__ = (UniqueConstraint("user_id", "course_id", name="uq_progress_user_course"),)
+
+
+class LessonCompletion(Base):
+    """Явная пометка студента «я прошёл этот урок».
+
+    Создаётся, когда студент нажимает кнопку «Дальше →» внизу страницы урока.
+    Используется в основном для теоретических уроков (без заданий) — у уроков
+    с заданиями достаточно того, что все задания решены, отметка опциональна.
+
+    Логика «урок пройден» в студенческом UI:
+        (есть запись в LessonCompletion для (user_id, lesson_id))
+        ИЛИ
+        (у урока есть задания и все они решены этим пользователем)
+    """
+    __tablename__ = "lesson_completions"
+
+    completion_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    lesson_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("lessons.lesson_id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    completed_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        # Идемпотентность: повторный POST на /complete не создаёт дубликат —
+        # вместо этого SQLAlchemy ловит IntegrityError, а API превращает это в 200 OK.
+        UniqueConstraint("user_id", "lesson_id", name="uq_lesson_completions_user_lesson"),
+    )

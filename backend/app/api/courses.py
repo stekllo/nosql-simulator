@@ -7,22 +7,29 @@
 
 Логика прогресса:
 - Задание решено ⇔ есть Submission со status=CORRECT для (user_id, task_id).
-- Урок пройден ⇔ все его задания решены ИЛИ у урока нет заданий (теоретический).
+- Урок пройден ⇔ ЛИБО все его задания решены, ЛИБО есть запись в
+  lesson_completions (студент явно нажал «Дальше →» внизу урока).
+  Теоретические уроки больше не считаются пройденными автоматически —
+  студент должен явно нажать «Дальше →».
 - Прогресс курса = lessons_completed / lessons_total в процентах.
 """
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser
 from app.db import get_db
-from app.models import Course, Lesson, Module, NoSQLType, Submission, SubmissionStatus, Task
+from app.models import (
+    Course, Lesson, LessonCompletion, Module, NoSQLType,
+    Submission, SubmissionStatus, Task,
+)
 from app.schemas.course import (
     AuthorBrief, CourseBrief, CourseDetail, CourseProgress, LessonBrief,
-    LessonDetail, ModuleWithLessons, TaskBrief,
+    LessonCompletionResponse, LessonDetail, ModuleWithLessons, TaskBrief,
 )
 
 router = APIRouter()
@@ -54,31 +61,69 @@ async def _get_solved_task_ids(
     return {row[0] for row in result.all()}
 
 
+async def _get_completed_lesson_ids(
+    session:    AsyncSession,
+    user_id:    int,
+    lesson_ids: list[int],
+) -> set[int]:
+    """Возвращает подмножество lesson_ids, по которым у пользователя есть
+    явная отметка «пройдено» (LessonCompletion).
+    """
+    if not lesson_ids:
+        return set()
+    result = await session.execute(
+        select(LessonCompletion.lesson_id)
+        .where(
+            LessonCompletion.user_id == user_id,
+            LessonCompletion.lesson_id.in_(lesson_ids),
+        )
+    )
+    return {row[0] for row in result.all()}
+
+
+def _is_lesson_completed(
+    *,
+    lesson_id:            int,
+    tasks:                list[int],
+    solved_task_ids:      set[int],
+    completed_lesson_ids: set[int],
+) -> bool:
+    """Урок считается пройденным, если:
+      - есть явная отметка LessonCompletion (студент нажал «Дальше →»), ИЛИ
+      - все его задания решены пользователем.
+
+    Урок без заданий и без явной отметки → НЕ пройден.
+    """
+    if lesson_id in completed_lesson_ids:
+        return True
+    if tasks and all(t in solved_task_ids for t in tasks):
+        return True
+    return False
+
+
 def _compute_course_progress(
     *,
-    lesson_to_tasks: dict[int, list[int]],
-    solved_task_ids: set[int],
+    lesson_to_tasks:      dict[int, list[int]],
+    solved_task_ids:      set[int],
+    completed_lesson_ids: set[int],
 ) -> CourseProgress:
-    """Считает прогресс по курсу из мапы 'урок → его task_ids' и набора
-    решённых заданий.
-
-    Урок считается пройденным, если все его задания решены или у него нет
-    заданий вообще (теория считается «пройденной» автоматически).
+    """Считает прогресс по курсу: сколько уроков и заданий из общего числа
+    уже пройдены/решены.
     """
     lessons_total     = len(lesson_to_tasks)
     lessons_completed = 0
     tasks_total       = 0
     tasks_solved      = 0
 
-    for tasks in lesson_to_tasks.values():
+    for lesson_id, tasks in lesson_to_tasks.items():
         tasks_total += len(tasks)
-        if not tasks:
-            # Теоретический урок — считается пройденным.
-            lessons_completed += 1
-            continue
-        solved_in_lesson = sum(1 for t in tasks if t in solved_task_ids)
-        tasks_solved += solved_in_lesson
-        if solved_in_lesson == len(tasks):
+        tasks_solved += sum(1 for t in tasks if t in solved_task_ids)
+        if _is_lesson_completed(
+            lesson_id            = lesson_id,
+            tasks                = tasks,
+            solved_task_ids      = solved_task_ids,
+            completed_lesson_ids = completed_lesson_ids,
+        ):
             lessons_completed += 1
 
     percent = int(round(100 * lessons_completed / lessons_total)) if lessons_total else 0
@@ -90,6 +135,61 @@ def _compute_course_progress(
         tasks_total       = tasks_total,
         percent           = percent,
     )
+
+
+async def _compute_next_lesson_id(
+    session: AsyncSession,
+    lesson:  Lesson,
+) -> int | None:
+    """Возвращает lesson_id следующего урока в курсе, либо None.
+
+    Порядок:
+      1) следующий урок в том же модуле (по order_num),
+      2) первый урок следующего модуля (по order_num),
+      3) None, если этот урок последний в курсе.
+
+    Используется на странице урока для кнопки «Дальше →».
+    """
+    # Текущий модуль
+    current_module = await session.get(Module, lesson.module_id)
+    if current_module is None:
+        return None
+
+    # 1) Следующий урок в том же модуле
+    next_in_module = await session.execute(
+        select(Lesson.lesson_id)
+        .where(
+            Lesson.module_id == lesson.module_id,
+            Lesson.order_num > lesson.order_num,
+        )
+        .order_by(Lesson.order_num)
+        .limit(1)
+    )
+    nxt = next_in_module.scalar_one_or_none()
+    if nxt is not None:
+        return nxt
+
+    # 2) Первый урок следующего модуля
+    next_module = await session.execute(
+        select(Module.module_id)
+        .where(
+            Module.course_id == current_module.course_id,
+            Module.order_num > current_module.order_num,
+        )
+        .order_by(Module.order_num)
+        .limit(1)
+    )
+    next_module_id = next_module.scalar_one_or_none()
+    if next_module_id is None:
+        return None
+
+    first_in_next = await session.execute(
+        select(Lesson.lesson_id)
+        .where(Lesson.module_id == next_module_id)
+        .order_by(Lesson.order_num)
+        .limit(1)
+    )
+    return first_in_next.scalar_one_or_none()
 
 
 # ---------- Каталог ----------
@@ -152,6 +252,10 @@ async def list_courses(
 
     # Решённые задания студента.
     solved = await _get_solved_task_ids(session, user.user_id, all_task_ids)
+    # Явно отмеченные пройденными уроки.
+    completed_lessons = await _get_completed_lesson_ids(
+        session, user.user_id, all_lesson_ids,
+    )
 
     # Собираем CourseBrief с прогрессом.
     out: list[CourseBrief] = []
@@ -162,8 +266,9 @@ async def list_courses(
         }
         progress = (
             _compute_course_progress(
-                lesson_to_tasks = lesson_to_tasks,
-                solved_task_ids = solved,
+                lesson_to_tasks      = lesson_to_tasks,
+                solved_task_ids      = solved,
+                completed_lesson_ids = completed_lessons,
             )
             if lesson_ids
             else None
@@ -216,12 +321,17 @@ async def get_course(
 
     all_task_ids = [t for ts in tasks_by_lesson.values() for t in ts]
     solved = await _get_solved_task_ids(session, user.user_id, all_task_ids)
+    completed_lessons = await _get_completed_lesson_ids(
+        session, user.user_id, lesson_ids,
+    )
 
     def lesson_completed(lesson_id: int) -> bool:
-        tasks = tasks_by_lesson.get(lesson_id, [])
-        if not tasks:
-            return True   # теория считается пройденной
-        return all(t in solved for t in tasks)
+        return _is_lesson_completed(
+            lesson_id            = lesson_id,
+            tasks                = tasks_by_lesson.get(lesson_id, []),
+            solved_task_ids      = solved,
+            completed_lesson_ids = completed_lessons,
+        )
 
     modules_out = [
         ModuleWithLessons(
@@ -249,8 +359,9 @@ async def get_course(
     }
     progress = (
         _compute_course_progress(
-            lesson_to_tasks = lesson_to_tasks,
-            solved_task_ids = solved,
+            lesson_to_tasks      = lesson_to_tasks,
+            solved_task_ids      = solved,
+            completed_lesson_ids = completed_lessons,
         )
         if lesson_ids
         else None
@@ -279,7 +390,8 @@ async def get_lesson(
 ) -> LessonDetail:
     """Содержимое урока + список заданий (без эталонного решения).
 
-    У каждого задания — флаг is_solved для текущего пользователя.
+    Возвращает is_solved для каждого задания, is_completed для самого
+    урока, и next_lesson_id для кнопки «Дальше →».
     """
     result = await session.execute(
         select(Lesson)
@@ -292,15 +404,27 @@ async def get_lesson(
 
     task_ids = [t.task_id for t in lesson.tasks]
     solved = await _get_solved_task_ids(session, user.user_id, task_ids)
+    completed_lessons = await _get_completed_lesson_ids(
+        session, user.user_id, [lesson_id],
+    )
+    is_completed = _is_lesson_completed(
+        lesson_id            = lesson_id,
+        tasks                = task_ids,
+        solved_task_ids      = solved,
+        completed_lesson_ids = completed_lessons,
+    )
+    next_lesson_id = await _compute_next_lesson_id(session, lesson)
 
     return LessonDetail(
-        lesson_id    = lesson.lesson_id,
-        module_id    = lesson.module_id,
-        title        = lesson.title,
-        content_md   = lesson.content_md,
-        order_num    = lesson.order_num,
-        duration_min = lesson.duration_min,
-        tasks        = [
+        lesson_id      = lesson.lesson_id,
+        module_id      = lesson.module_id,
+        title          = lesson.title,
+        content_md     = lesson.content_md,
+        order_num      = lesson.order_num,
+        duration_min   = lesson.duration_min,
+        is_completed   = is_completed,
+        next_lesson_id = next_lesson_id,
+        tasks          = [
             TaskBrief(
                 task_id   = t.task_id,
                 statement = t.statement,
@@ -311,3 +435,57 @@ async def get_lesson(
             for t in sorted(lesson.tasks, key=lambda x: x.task_id)
         ],
     )
+
+
+# ---------- Отметка урока как пройденного ----------
+
+@router.post(
+    "/lessons/{lesson_id}/complete",
+    response_model=LessonCompletionResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def complete_lesson(
+    lesson_id: int,
+    user:      CurrentUser,
+    session:   Annotated[AsyncSession, Depends(get_db)],
+) -> LessonCompletionResponse:
+    """Отметить урок как пройденный для текущего пользователя.
+
+    Идемпотентно: повторный POST на тот же урок не создаёт дубликат и
+    возвращает 200 OK с already_completed=true.
+    """
+    # Проверяем что урок существует.
+    lesson = await session.get(Lesson, lesson_id)
+    if lesson is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Урок не найден")
+
+    # Уже отмечен?
+    existing = await session.execute(
+        select(LessonCompletion)
+        .where(
+            LessonCompletion.user_id   == user.user_id,
+            LessonCompletion.lesson_id == lesson_id,
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        return LessonCompletionResponse(
+            lesson_id          = lesson_id,
+            already_completed  = True,
+        )
+
+    # Создаём запись. Защищаемся от гонки (user двойным кликом и т.п.) через
+    # IntegrityError — в этом случае возвращаем already_completed=true.
+    completion = LessonCompletion(user_id=user.user_id, lesson_id=lesson_id)
+    session.add(completion)
+    try:
+        await session.commit()
+        return LessonCompletionResponse(
+            lesson_id          = lesson_id,
+            already_completed  = False,
+        )
+    except IntegrityError:
+        await session.rollback()
+        return LessonCompletionResponse(
+            lesson_id          = lesson_id,
+            already_completed  = True,
+        )

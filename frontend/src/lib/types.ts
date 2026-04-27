@@ -168,23 +168,27 @@ export interface SubmissionBrief {
 // ---------- Конструктор ----------
 
 export interface TaskCreate {
-  statement:          string;
-  db_type:            NoSQLType;
-  fixture:            Record<string, unknown>;
-  reference_solution: string;
-  max_score:          number;
-  attempts_limit:     number;
+  statement:           string;
+  db_type:             NoSQLType;
+  fixture:             Record<string, unknown>;
+  reference_solution:  string;
+  reference_solutions?: string[];
+  compare_ordered?:    boolean;
+  max_score:           number;
+  attempts_limit:      number;
 }
 
 export interface TaskOut {
-  task_id:            number;
-  lesson_id:          number;
-  statement:          string;
-  db_type:            NoSQLType;
-  fixture:            Record<string, unknown>;
-  reference_solution: string;
-  max_score:          number;
-  attempts_limit:     number;
+  task_id:             number;
+  lesson_id:           number;
+  statement:           string;
+  db_type:             NoSQLType;
+  fixture:             Record<string, unknown>;
+  reference_solution:  string;
+  reference_solutions: string[];
+  compare_ordered:     boolean;
+  max_score:           number;
+  attempts_limit:      number;
 }
 
 export interface ReferenceDryRun {

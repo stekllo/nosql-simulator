@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.deps import CurrentUser
 from app.db import get_db
 from app.models import Lesson, NoSQLType, Submission, SubmissionStatus, Task
-from app.sandbox.mongo_runner import compare_results, execute_mql
+from app.sandbox.mongo_runner import compare_to_any_reference, execute_mql
 from app.schemas.course import LessonDetail, TaskBrief
 from app.schemas.submission import RunRequest, RunResponse, SubmitResponse
 
@@ -107,8 +107,14 @@ async def submit_solution(
 
     client = AsyncIOMotorClient(settings.MONGO_URL, serverSelectionTimeoutMS=3000)
     try:
-        student_outcome   = await execute_mql(client, task.fixture, body.query_text)
-        reference_outcome = await execute_mql(client, task.fixture, task.reference_solution)
+        # Запускаем запрос студента.
+        student_outcome = await execute_mql(client, task.fixture, body.query_text)
+
+        # Запускаем все эталонные решения.
+        reference_outcomes = []
+        for ref_query in task.all_reference_solutions:
+            ref_outcome = await execute_mql(client, task.fixture, ref_query)
+            reference_outcomes.append(ref_outcome)
     finally:
         client.close()
 
@@ -121,12 +127,21 @@ async def submit_solution(
         is_correct = False
         score      = 0
     else:
-        if not reference_outcome.ok:
+        # Все эталоны должны успешно отработать (хотя бы один).
+        valid_references = [r.result for r in reference_outcomes if r.ok]
+        if not valid_references:
             raise HTTPException(
                 status.HTTP_500_INTERNAL_SERVER_ERROR,
-                "Эталонное решение упало — свяжитесь с преподавателем",
+                "Эталонные решения упали — свяжитесь с преподавателем",
             )
-        is_correct  = compare_results(student_outcome.result, reference_outcome.result)
+
+        # Сравниваем результат студента со всеми эталонами.
+        # Если совпал хотя бы с одним — задание решено.
+        is_correct = compare_to_any_reference(
+            student_outcome.result,
+            valid_references,
+            ordered=task.compare_ordered,
+        )
         status_enum = SubmissionStatus.CORRECT if is_correct else SubmissionStatus.WRONG
         score       = task.max_score if is_correct else 0
 

@@ -46,10 +46,6 @@ def _apply_modifiers(cursor, modifiers: list[tuple[str, list[Any]]]):
             cursor = cursor.skip(int(n))
         elif name == "project":
             projection = args[0] if args else {}
-            # Motor у курсора есть только конструктор с projection; для совместимости
-            # через find с тем же filter не получится здесь — пропускаем, чтобы не падать.
-            # Практически .project(...) редко встречается как метод курсора в учебных
-            # задачах; второй аргумент find покрывает 99% случаев.
             if hasattr(cursor, "project"):
                 cursor = cursor.project(projection)
     return cursor
@@ -205,17 +201,59 @@ def _normalize(value: Any) -> Any:
 
 
 def compare_results(student: Any, reference: Any, *, ordered: bool = True) -> bool:
-    """Сравнивает результат студента с эталонным."""
+    """Сравнивает результат студента с эталонным.
+
+    Параметр `ordered`:
+      True  — порядок элементов в списках важен (для $sort, $limit задач).
+      False — порядок не важен; работает с произвольными dict внутри списков.
+    """
     if isinstance(student, list) and isinstance(reference, list):
         if len(student) != len(reference):
             return False
         if ordered:
-            return all(compare_results(a, b, ordered=ordered) for a, b in zip(student, reference))
-        return sorted(map(repr, student)) == sorted(map(repr, reference))
+            return all(
+                compare_results(a, b, ordered=ordered)
+                for a, b in zip(student, reference)
+            )
+        # Сравнение без учёта порядка: для каждого элемента эталона
+        # ищем не использованную пару среди элементов студента.
+        used = [False] * len(student)
+        for ref_item in reference:
+            matched = False
+            for i, stud_item in enumerate(student):
+                if used[i]:
+                    continue
+                if compare_results(stud_item, ref_item, ordered=False):
+                    used[i] = True
+                    matched = True
+                    break
+            if not matched:
+                return False
+        return True
 
     if isinstance(student, dict) and isinstance(reference, dict):
         if set(student.keys()) != set(reference.keys()):
             return False
-        return all(compare_results(student[k], reference[k], ordered=ordered) for k in student)
+        return all(
+            compare_results(student[k], reference[k], ordered=ordered)
+            for k in student
+        )
 
     return student == reference
+
+
+def compare_to_any_reference(
+    student:    Any,
+    references: list[Any],
+    *,
+    ordered:    bool = True,
+) -> bool:
+    """Возвращает True, если решение студента совпадает хотя бы с одним эталоном.
+
+    Используется в задачах с несколькими допустимыми правильными решениями.
+    Если references пуст — возвращает False.
+    """
+    for ref in references:
+        if compare_results(student, ref, ordered=ordered):
+            return True
+    return False

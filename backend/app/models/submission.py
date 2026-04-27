@@ -37,21 +37,38 @@ submission_status_enum = PgEnum(
 class Task(Base):
     __tablename__ = "tasks"
 
-    task_id:            Mapped[int]       = mapped_column(BigInteger, primary_key=True)
-    lesson_id:          Mapped[int]       = mapped_column(
+    task_id:             Mapped[int]       = mapped_column(BigInteger, primary_key=True)
+    lesson_id:           Mapped[int]       = mapped_column(
         BigInteger, ForeignKey("lessons.lesson_id", ondelete="CASCADE"), nullable=False
     )
-    statement:          Mapped[str]       = mapped_column(Text, nullable=False)
-    db_type:            Mapped[NoSQLType] = mapped_column(nosql_type_enum, nullable=False)
-    fixture:            Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    reference_solution: Mapped[str]       = mapped_column(Text, nullable=False)
-    max_score:          Mapped[int]       = mapped_column(SmallInteger, default=10, nullable=False)
-    attempts_limit:     Mapped[int]       = mapped_column(SmallInteger, default=0,  nullable=False)
+    statement:           Mapped[str]       = mapped_column(Text, nullable=False)
+    db_type:             Mapped[NoSQLType] = mapped_column(nosql_type_enum, nullable=False)
+    fixture:             Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    # Старое одиночное эталонное решение (для обратной совместимости).
+    reference_solution:  Mapped[str]       = mapped_column(Text, nullable=False)
+    # Новое поле: массив альтернативных эталонов. Если пуст — fallback на reference_solution.
+    reference_solutions: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]"
+    )
+    # Если True — порядок элементов в результате важен (для задач с $sort, $limit).
+    # Если False — сравниваем как multiset.
+    compare_ordered:     Mapped[bool]      = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    max_score:           Mapped[int]       = mapped_column(SmallInteger, default=10, nullable=False)
+    attempts_limit:      Mapped[int]       = mapped_column(SmallInteger, default=0,  nullable=False)
 
     lesson:      Mapped["Lesson"]           = relationship(back_populates="tasks")
     submissions: Mapped[list["Submission"]] = relationship(
         back_populates="task", cascade="all, delete-orphan",
     )
+
+    @property
+    def all_reference_solutions(self) -> list[str]:
+        """Все эталоны: если массив непустой — он, иначе одиночный."""
+        if self.reference_solutions:
+            return list(self.reference_solutions)
+        return [self.reference_solution]
 
 
 class Submission(Base):

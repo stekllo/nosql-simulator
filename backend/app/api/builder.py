@@ -18,7 +18,7 @@ from app.models import (
 )
 from app.sandbox.mongo_runner import execute_mql
 from app.schemas.builder import (
-    CourseCreate, LessonCreate, ModuleCreate,
+    CourseCreate, LessonCreate, LessonUpdate, ModuleCreate,
     ReferenceDryRun, TaskCreate, TaskOut,
 )
 from app.schemas.course import (
@@ -153,7 +153,6 @@ async def create_module(
     if user.role != UserRole.ADMIN and course.author_id != user.user_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Чужой курс")
 
-    # Проверка уникальности order_num в пределах курса.
     exists_q = await session.execute(
         select(Module).where(Module.course_id == course_id)
         .where(Module.order_num == body.order_num)
@@ -176,7 +175,7 @@ async def create_module(
     return {"module_id": module.module_id, "title": module.title, "order_num": module.order_num}
 
 
-# ---------- Урок ----------
+# ---------- Урок: создание ----------
 
 @router.post("/modules/{module_id}/lessons", status_code=status.HTTP_201_CREATED)
 async def create_lesson(
@@ -221,6 +220,119 @@ async def create_lesson(
         "title":     lesson.title,
         "order_num": lesson.order_num,
     }
+
+
+# ---------- Урок: получить полное содержимое для редактирования ----------
+
+@router.get("/lessons/{lesson_id}")
+async def get_lesson_for_edit(
+    lesson_id: int,
+    user:      Annotated[User, Depends(require_role(UserRole.TEACHER, UserRole.ADMIN))],
+    session:   Annotated[AsyncSession, Depends(get_db)],
+):
+    """Полный текст урока (Markdown) для редактирования преподавателем."""
+    q = await session.execute(
+        select(Lesson)
+        .options(selectinload(Lesson.module).selectinload(Module.course))
+        .where(Lesson.lesson_id == lesson_id)
+    )
+    lesson = q.scalar_one_or_none()
+    if lesson is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Урок не найден")
+
+    course = lesson.module.course
+    if user.role != UserRole.ADMIN and course.author_id != user.user_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Чужой урок")
+
+    return {
+        "lesson_id":    lesson.lesson_id,
+        "module_id":    lesson.module_id,
+        "course_id":    course.course_id,
+        "title":        lesson.title,
+        "content_md":   lesson.content_md,
+        "order_num":    lesson.order_num,
+        "duration_min": lesson.duration_min,
+    }
+
+
+# ---------- Урок: обновить (Markdown-редактор для преподавателя) ----------
+
+@router.patch("/lessons/{lesson_id}")
+async def update_lesson(
+    lesson_id: int,
+    body:      LessonUpdate,
+    user:      Annotated[User, Depends(require_role(UserRole.TEACHER, UserRole.ADMIN))],
+    session:   Annotated[AsyncSession, Depends(get_db)],
+):
+    q = await session.execute(
+        select(Lesson)
+        .options(selectinload(Lesson.module).selectinload(Module.course))
+        .where(Lesson.lesson_id == lesson_id)
+    )
+    lesson = q.scalar_one_or_none()
+    if lesson is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Урок не найден")
+
+    course = lesson.module.course
+    if user.role != UserRole.ADMIN and course.author_id != user.user_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Чужой урок")
+
+    # Применяем только переданные поля.
+    if body.title is not None:
+        lesson.title = body.title
+    if body.content_md is not None:
+        lesson.content_md = body.content_md
+    if body.duration_min is not None:
+        lesson.duration_min = body.duration_min
+    if body.order_num is not None and body.order_num != lesson.order_num:
+        # Проверка уникальности нового order_num.
+        conflict_q = await session.execute(
+            select(Lesson)
+            .where(Lesson.module_id == lesson.module_id)
+            .where(Lesson.order_num == body.order_num)
+            .where(Lesson.lesson_id != lesson_id)
+        )
+        if conflict_q.scalar_one_or_none():
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Урок с порядком {body.order_num} уже существует в модуле",
+            )
+        lesson.order_num = body.order_num
+
+    await session.commit()
+    await session.refresh(lesson)
+    return {
+        "lesson_id":    lesson.lesson_id,
+        "title":        lesson.title,
+        "content_md":   lesson.content_md,
+        "order_num":    lesson.order_num,
+        "duration_min": lesson.duration_min,
+    }
+
+
+# ---------- Урок: удалить ----------
+
+@router.delete("/lessons/{lesson_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_lesson(
+    lesson_id: int,
+    user:      Annotated[User, Depends(require_role(UserRole.TEACHER, UserRole.ADMIN))],
+    session:   Annotated[AsyncSession, Depends(get_db)],
+):
+    q = await session.execute(
+        select(Lesson)
+        .options(selectinload(Lesson.module).selectinload(Module.course))
+        .where(Lesson.lesson_id == lesson_id)
+    )
+    lesson = q.scalar_one_or_none()
+    if lesson is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Урок не найден")
+
+    course = lesson.module.course
+    if user.role != UserRole.ADMIN and course.author_id != user.user_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Чужой урок")
+
+    await session.delete(lesson)
+    await session.commit()
 
 
 # ---------- Проверка эталонного решения ----------
@@ -285,7 +397,6 @@ async def create_task(
             f"({course.nosql_type.value})",
         )
 
-    # Валидация fixture — должен содержать collection и documents (для document-задач).
     if body.db_type == NoSQLType.DOCUMENT:
         if "collection" not in body.fixture or "documents" not in body.fixture:
             raise HTTPException(
@@ -299,13 +410,15 @@ async def create_task(
             )
 
     task = Task(
-        lesson_id          = lesson_id,
-        statement          = body.statement,
-        db_type            = body.db_type,
-        fixture            = body.fixture,
-        reference_solution = body.reference_solution,
-        max_score          = body.max_score,
-        attempts_limit     = body.attempts_limit,
+        lesson_id           = lesson_id,
+        statement           = body.statement,
+        db_type             = body.db_type,
+        fixture             = body.fixture,
+        reference_solution  = body.reference_solution,
+        reference_solutions = body.reference_solutions,
+        compare_ordered     = body.compare_ordered,
+        max_score           = body.max_score,
+        attempts_limit      = body.attempts_limit,
     )
     session.add(task)
     await session.commit()

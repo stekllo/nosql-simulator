@@ -1,16 +1,16 @@
 /**
- * Конструктор нового задания (Рис. 2.8 из ВКР).
+ * Конструктор нового задания.
  *
  * Две колонки:
- *  - слева: формулировка, тип СУБД, баллы, лимит попыток
- *  - справа: два редактора (fixture JSON + эталонное решение MQL),
+ *  - слева: формулировка, тип СУБД, баллы, лимит попыток, флаг compare_ordered
+ *  - справа: редактор fixture, основной эталон, дополнительные эталоны (можно добавлять/удалять),
  *            кнопка «Проверить эталон» с preview результата.
  */
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import Editor from "@monaco-editor/react";
-import { Play, Save, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Play, Save, CheckCircle2, XCircle, Loader2, Plus, Trash2 } from "lucide-react";
 
 import { useCreateTask, useReferenceDryRun } from "@/hooks/useBuilder";
 import { extractErrorMessage } from "@/lib/api";
@@ -18,10 +18,11 @@ import type { NoSQLType, ReferenceDryRun, TaskCreate } from "@/lib/types";
 
 
 interface FormFields {
-  statement:      string;
-  db_type:        NoSQLType;
-  max_score:      number;
-  attempts_limit: number;
+  statement:       string;
+  db_type:         NoSQLType;
+  max_score:       number;
+  attempts_limit:  number;
+  compare_ordered: boolean;
 }
 
 
@@ -49,18 +50,21 @@ export function TaskBuilderPage() {
   const dryRun     = useReferenceDryRun();
   const createTask = useCreateTask(lessonIdNum);
 
-  const [fixtureText,  setFixtureText]  = useState(STARTER_FIXTURE);
-  const [solutionText, setSolutionText] = useState(STARTER_SOLUTION);
-  const [fixtureError, setFixtureError] = useState<string | null>(null);
+  const [fixtureText,   setFixtureText]   = useState(STARTER_FIXTURE);
+  const [solutionText,  setSolutionText]  = useState(STARTER_SOLUTION);
+  // Дополнительные эталоны (могут быть пустыми или несколько штук).
+  const [altSolutions,  setAltSolutions]  = useState<string[]>([]);
+  const [fixtureError,  setFixtureError]  = useState<string | null>(null);
 
   const {
     register, handleSubmit, formState: { errors },
   } = useForm<FormFields>({
     defaultValues: {
-      statement:      "",
-      db_type:        "document",
-      max_score:      10,
-      attempts_limit: 5,
+      statement:       "",
+      db_type:         "document",
+      max_score:       10,
+      attempts_limit:  5,
+      compare_ordered: true,
     },
   });
 
@@ -79,13 +83,17 @@ export function TaskBuilderPage() {
   const buildPayload = (fields: FormFields): TaskCreate | null => {
     const fixture = parseFixture();
     if (!fixture) return null;
+    // Фильтруем пустые альтернативные эталоны.
+    const refs = altSolutions.map(s => s.trim()).filter(s => s.length > 0);
     return {
-      statement:          fields.statement,
-      db_type:            fields.db_type,
+      statement:           fields.statement,
+      db_type:             fields.db_type,
       fixture,
-      reference_solution: solutionText,
-      max_score:          fields.max_score,
-      attempts_limit:     fields.attempts_limit,
+      reference_solution:  solutionText,
+      reference_solutions: refs.length > 0 ? [solutionText, ...refs] : [],
+      compare_ordered:     fields.compare_ordered,
+      max_score:           fields.max_score,
+      attempts_limit:      fields.attempts_limit,
     };
   };
 
@@ -104,6 +112,20 @@ export function TaskBuilderPage() {
       /* ошибка отобразится через createTask.error */
     }
   });
+
+  const addAltSolution = () => {
+    setAltSolutions([...altSolutions, ""]);
+  };
+
+  const updateAltSolution = (idx: number, value: string) => {
+    const next = [...altSolutions];
+    next[idx] = value;
+    setAltSolutions(next);
+  };
+
+  const removeAltSolution = (idx: number) => {
+    setAltSolutions(altSolutions.filter((_, i) => i !== idx));
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
@@ -176,6 +198,24 @@ export function TaskBuilderPage() {
                 <p className="text-[11px] text-slate-500 mt-1">0 — без ограничений</p>
               </div>
             </div>
+
+            {/* Флаг сравнения с учётом порядка */}
+            <div className="border-t border-slate-100 pt-4">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  {...register("compare_ordered")}
+                  className="mt-0.5 w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-slate-700">Учитывать порядок результата</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Включите, если в задании используется <code className="font-mono">$sort</code> или <code className="font-mono">$limit</code>.
+                    Иначе порядок элементов в массиве не повлияет на результат сравнения.
+                  </p>
+                </div>
+              </label>
+            </div>
           </section>
 
           {/* Preview */}
@@ -216,7 +256,7 @@ export function TaskBuilderPage() {
             )}
           </section>
 
-          {/* Эталонное решение */}
+          {/* Основное эталонное решение */}
           <section className="bg-white rounded-lg border border-slate-200 overflow-hidden">
             <div className="px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">
@@ -240,6 +280,54 @@ export function TaskBuilderPage() {
               />
             </div>
           </section>
+
+          {/* Альтернативные эталоны */}
+          {altSolutions.map((alt, idx) => (
+            <section key={idx} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+              <div className="px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                  Альтернативный эталон #{idx + 1}
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">MongoDB</span>
+                <button
+                  type="button"
+                  onClick={() => removeAltSolution(idx)}
+                  className="ml-auto p-1 text-slate-500 hover:text-rose-600"
+                  title="Удалить эталон"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="h-48">
+                <Editor
+                  language="javascript"
+                  theme="vs-dark"
+                  value={alt}
+                  onChange={(v) => updateAltSolution(idx, v ?? "")}
+                  options={{
+                    fontFamily:  "ui-monospace, 'JetBrains Mono', Consolas, monospace",
+                    fontSize:    12.5,
+                    minimap:     { enabled: false },
+                    scrollBeyondLastLine: false,
+                    padding:     { top: 10 },
+                  }}
+                />
+              </div>
+            </section>
+          ))}
+
+          {/* Кнопка "Добавить альтернативный эталон" */}
+          <button
+            type="button"
+            onClick={addAltSolution}
+            className="w-full px-3 py-2 text-sm text-slate-600 bg-white border border-dashed border-slate-300 hover:bg-slate-50 hover:border-slate-400 rounded flex items-center justify-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Добавить альтернативный эталон
+          </button>
+          <p className="text-[11px] text-slate-500 -mt-2">
+            Если у задачи есть несколько правильных решений, добавьте каждый вариант. Студент пройдёт задание, если его ответ совпадёт хотя бы с одним из эталонов.
+          </p>
 
           {/* Actions */}
           <div className="flex items-center justify-between">

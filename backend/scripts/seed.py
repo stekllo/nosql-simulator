@@ -2405,39 +2405,173 @@ SELECT WRITETIME(data), TTL(data) FROM sessions WHERE session_id = 'sess123';
 
 
 NEO4J_COURSE = {
-    "title":       "Neo4j и язык Cypher",
-    "description": "Графовая СУБД Neo4j. Узлы, рёбра, обход графа на языке Cypher.",
+    "title":       "Neo4j: графовая модель",
+    "description": "Графовая СУБД Neo4j. Узлы, рёбра, свойства, обход графа на языке Cypher.",
     "nosql_type":  NoSQLType.GRAPH,
     "difficulty":  3,
     "modules": [
+
+        # ============================================================
+        # МОДУЛЬ 1. Введение в Neo4j и Cypher
+        # ============================================================
         {
-            "title":       "Модуль 1. Графовая модель",
-            "description": "Узлы, отношения, свойства.",
+            "title":       "Модуль 1. Введение в Neo4j и Cypher",
+            "description": "Узлы, отношения, свойства. Базовые команды Cypher.",
             "lessons": [
+
+                # ---- Урок 1.1: теория ----
                 {
                     "title":        "Что такое граф свойств",
                     "duration_min": 10,
                     "content_md": """# Графовая модель данных
 
-В Neo4j данные представлены как **граф свойств** (labeled property graph): узлы (вершины) с метками и рёбра (отношения) между ними. И узлы, и рёбра могут иметь произвольный набор свойств.
+**Neo4j** — это нативно графовая СУБД. В отличие от реляционных, документных или колоночных баз, данные в Neo4j представлены как **граф свойств** (labeled property graph).
 
-## Пример
+## Основные понятия
+
+- **Узел (node)** — сущность с одной или несколькими метками. Метки группируют узлы по типам: `:Person`, `:Movie`, `:City`.
+- **Отношение (relationship)** — связь между двумя узлами с обязательным типом: `KNOWS`, `ACTED_IN`, `LIVES_IN`. Отношения всегда направленные.
+- **Свойства (properties)** — пары ключ-значение, могут быть и у узлов, и у отношений: `{name: 'Anna', age: 30}`.
+
+## Когда использовать графы
+
+Графовая модель идеально подходит, когда **связи между сущностями важнее самих сущностей**:
+
+- **Социальные сети** — друзья друзей, группы, рекомендации.
+- **Рекомендательные системы** — «посмотревшие X также смотрели Y».
+- **Анализ мошенничества** — поиск подозрительных цепочек транзакций.
+- **Графы знаний** — Wikipedia, Google Knowledge Graph.
+- **Анализ зависимостей** — пакеты, импорты, права доступа.
+
+В реляционной модели «найти всех друзей друзей» требует JOIN'а таблицы `friendship` саму с собой. На графе это естественный обход — за один запрос.
+
+## Cypher — язык запросов
+
+Запросы пишутся в виде **визуальных паттернов** — на ASCII «рисуется» то что мы ищем:
 
 ```cypher
-CREATE (alice:Person {name: 'Alice', age: 30})
-CREATE (bob:Person {name: 'Bob',   age: 25})
-CREATE (alice)-[:KNOWS {since: 2020}]->(bob)
+// Узел Person с именем Alice
+(alice:Person {name: 'Alice'})
+
+// Отношение KNOWS от Alice к кому-то
+(alice)-[:KNOWS]->(other)
+
+// Полный паттерн: Alice знает кого-то
+MATCH (alice:Person {name: 'Alice'})-[:KNOWS]->(friend)
+RETURN friend.name
 ```
 
-## Когда использовать
+Этот запрос читается как: «найди узел Person с name='Alice', найди от него отношение KNOWS, верни имя того, к кому это отношение ведёт».
 
-- Социальные сети
-- Рекомендательные системы
-- Анализ зависимостей и мошенничества
-- Графы знаний
-
-> **Скоро:** интерактивная Neo4j-песочница с Cypher-запросами. Пока курс находится в разработке.
+В следующем уроке создадим первые узлы и связи.
 """,
+                },
+
+                # ---- Урок 1.2: с заданием ----
+                {
+                    "title":        "Создание узлов и связей",
+                    "duration_min": 12,
+                    "content_md": """# Создание узлов и связей
+
+В этом уроке научимся создавать узлы, связи и читать их обратно.
+
+## CREATE — создание узлов
+
+```cypher
+CREATE (n:Person {name: 'Anna', age: 28})
+```
+
+Слева от двоеточия — переменная `n` (имя в рамках запроса), справа — метка `Person`. В фигурных скобках — свойства.
+
+Можно создать несколько узлов в одном CREATE:
+
+```cypher
+CREATE (a:Person {name: 'Anna'}), (b:Person {name: 'Bob'})
+```
+
+Можно создать узел сразу со связью:
+
+```cypher
+CREATE (a:Person {name: 'Anna'})-[:KNOWS]->(b:Person {name: 'Bob'})
+```
+
+Это создаст: узел Anna, узел Bob, и связь KNOWS от Anna к Bob.
+
+## MATCH — поиск узлов
+
+```cypher
+MATCH (n:Person) RETURN n
+```
+
+Найдёт все узлы с меткой `:Person`.
+
+С фильтрацией по свойству:
+
+```cypher
+MATCH (n:Person {name: 'Anna'}) RETURN n
+MATCH (n:Person) WHERE n.age > 25 RETURN n.name
+```
+
+## Поиск через связи
+
+Это сильнейшая сторона графов. Найти всех, с кем знакома Anna:
+
+```cypher
+MATCH (anna:Person {name: 'Anna'})-[:KNOWS]->(friend)
+RETURN friend.name
+```
+
+Этот паттерн читается слева направо как стрелка: «от Anna через KNOWS к friend».
+
+Связь без указания направления:
+
+```cypher
+MATCH (a:Person {name: 'Anna'})-[:KNOWS]-(b:Person)
+RETURN b.name
+```
+
+Используется `--` или `<--` для обратного направления.
+
+## Песочница в этом курсе
+
+Каждая проверка работает в **изолированной транзакции**, которая откатывается после выполнения. Это значит:
+
+- Любые узлы и связи, которые ты создашь, **не сохраняются** между запусками.
+- Не нужно очищать данные перед следующей проверкой.
+- Можешь свободно экспериментировать с CREATE/DELETE/MERGE — это безопасно.
+
+## Практическое задание
+
+Под этим уроком — задание: создать трёх людей со связью «знаком», прочитать одну связь.
+""",
+                    "tasks": [
+                        {
+                            "statement": (
+                                "Создайте трёх пользователей с меткой `Person`: "
+                                "Anna (age=28), Bob (age=30), Carol (age=25). "
+                                "Затем создайте связь `KNOWS` от Anna к Bob. "
+                                "В конце верните имя того, с кем знакома Anna, "
+                                "и его возраст. Поля результата — `name` и `age`."
+                            ),
+                            "fixture": {"preload": []},
+                            "reference_solution": (
+                                "CREATE (anna:Person {name: 'Anna', age: 28});\n"
+                                "CREATE (bob:Person {name: 'Bob', age: 30});\n"
+                                "CREATE (carol:Person {name: 'Carol', age: 25});\n"
+                                "MATCH (a:Person {name: 'Anna'}), (b:Person {name: 'Bob'}) CREATE (a)-[:KNOWS]->(b);\n"
+                                "MATCH (a:Person {name: 'Anna'})-[:KNOWS]->(friend) RETURN friend.name AS name, friend.age AS age;"
+                            ),
+                            "reference_solutions": [
+                                # Альтернативный синтаксис: всё в одном CREATE с inline-связью
+                                "CREATE (a:Person {name: 'Anna', age: 28})-[:KNOWS]->(b:Person {name: 'Bob', age: 30});\n"
+                                "CREATE (c:Person {name: 'Carol', age: 25});\n"
+                                "MATCH (a:Person {name: 'Anna'})-[:KNOWS]->(friend) RETURN friend.name AS name, friend.age AS age;",
+                            ],
+                            "compare_ordered": False,
+                            "max_score":      10,
+                            "attempts_limit":  0,
+                        },
+                    ],
                 },
             ],
         },
@@ -2495,7 +2629,8 @@ async def seed_student_activity(
 
     tasks_q = await session.execute(
         select(Task).where(Task.db_type.in_([
-            NoSQLType.DOCUMENT, NoSQLType.KEY_VALUE, NoSQLType.COLUMN,
+            NoSQLType.DOCUMENT, NoSQLType.KEY_VALUE,
+            NoSQLType.COLUMN,   NoSQLType.GRAPH,
         ]))
     )
     tasks = list(tasks_q.scalars().all())
@@ -2509,6 +2644,7 @@ async def seed_student_activity(
         NoSQLType.DOCUMENT:  "db.users.find({})",
         NoSQLType.KEY_VALUE: "GET nonexistent_key",
         NoSQLType.COLUMN:    "SELECT * FROM nonexistent_table;",
+        NoSQLType.GRAPH:     "MATCH (n:NonexistentLabel) RETURN n;",
     }
 
     now = datetime.now()  # naive — БД хранит timestamp WITHOUT TIME ZONE

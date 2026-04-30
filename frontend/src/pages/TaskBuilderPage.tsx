@@ -33,7 +33,7 @@ interface FormFields {
 // меняет тип СУБД в селекторе — стартеры тоже меняются (если препод
 // ещё не правил поля вручную).
 
-const STARTER_FIXTURES: Record<"document" | "key_value" | "column", string> = {
+const STARTER_FIXTURES: Record<"document" | "key_value" | "column" | "graph", string> = {
   document: `{
   "collection": "orders",
   "documents": [
@@ -55,9 +55,16 @@ const STARTER_FIXTURES: Record<"document" | "key_value" | "column", string> = {
     "INSERT INTO users (user_id, name) VALUES (2, 'Bob');"
   ]
 }`,
+  graph: `{
+  "preload": [
+    "CREATE (a:Person {name: 'Anna', age: 28})",
+    "CREATE (b:Person {name: 'Bob', age: 30})",
+    "MATCH (a:Person {name: 'Anna'}), (b:Person {name: 'Bob'}) CREATE (a)-[:KNOWS]->(b)"
+  ]
+}`,
 };
 
-const STARTER_SOLUTIONS: Record<"document" | "key_value" | "column", string> = {
+const STARTER_SOLUTIONS: Record<"document" | "key_value" | "column" | "graph", string> = {
   document: `db.orders.aggregate([
   { $match: { status: "paid" } },
   { $group: { _id: "$user_id", total: { $sum: "$amount" } } },
@@ -70,6 +77,10 @@ GET counter`,
   column: `-- Каждая строка/блок до ; — одна команда.
 -- Возвращается результат последней.
 SELECT * FROM users WHERE user_id = 1;`,
+  graph: `// Каждая команда заканчивается точкой с запятой.
+// Возвращается результат последней.
+MATCH (a:Person {name: 'Anna'})-[:KNOWS]->(friend)
+RETURN friend.name AS name, friend.age AS age;`,
 };
 
 // Какой Monaco-язык подсветки использовать для редактора эталона.
@@ -124,7 +135,7 @@ export function TaskBuilderPage() {
   // НО только если препод ещё не правил их вручную (защита от потери работы).
   // «Не правил» = текст совпадает с одним из известных стартеров.
   useEffect(() => {
-    if (dbType !== "document" && dbType !== "key_value" && dbType !== "column") return;
+    if (dbType !== "document" && dbType !== "key_value" && dbType !== "column" && dbType !== "graph") return;
 
     const knownFixtures  = Object.values(STARTER_FIXTURES);
     const knownSolutions = Object.values(STARTER_SOLUTIONS);
@@ -242,10 +253,10 @@ export function TaskBuilderPage() {
                 <option value="document">MongoDB (document)</option>
                 <option value="key_value">Redis (key-value)</option>
                 <option value="column">Cassandra (column)</option>
-                <option value="graph"     disabled>Neo4j (graph) — скоро</option>
+                <option value="graph">Neo4j (graph)</option>
               </select>
               <p className="text-[11px] text-slate-500 mt-1">
-                Автоматическая проверка работает для MongoDB, Redis и Cassandra. Neo4j — скоро.
+                Автоматическая проверка работает для всех четырёх типов NoSQL: MongoDB, Redis, Cassandra и Neo4j.
               </p>
             </div>
 

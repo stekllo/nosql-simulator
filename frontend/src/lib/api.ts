@@ -7,7 +7,7 @@ import axios, { AxiosError } from "axios";
 
 import { useAuthStore } from "@/stores/auth";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL ?? "/api";
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -39,7 +39,9 @@ api.interceptors.response.use(
 /** Извлекает человеко-читаемое сообщение из ошибки FastAPI. */
 export function extractErrorMessage(err: unknown): string {
   if (err instanceof AxiosError) {
-    const data = err.response?.data as { detail?: string | Array<{ msg: string }> } | undefined;
+    const data = err.response?.data as
+      | { detail?: string | Array<{ msg: string }> }
+      | undefined;
     if (typeof data?.detail === "string") return data.detail;
     if (Array.isArray(data?.detail) && data.detail.length > 0) {
       return data.detail.map((e) => e.msg).join("; ");

@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.db import Base
 # Импорт моделей нужен, чтобы metadata узнала про все таблицы.
 from app.models import (  # noqa: F401
-    Achievement, Course, Lesson, Module, Progress,
+    Achievement, Course, Lesson, LessonCompletion, Module, Progress,
     Submission, Task, User, UserAchievement,
 )
 

@@ -1,4 +1,5 @@
 """Точка входа FastAPI-приложения NoSQL Simulator."""
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,11 +13,35 @@ from app.api.me      import router as me_router
 from app.api.tasks   import router as tasks_router
 from app.api.teacher import router as teacher_router
 from app.core.config import settings
+from app.db.migrations import run_migrations_on_startup
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    """Lifecycle-обработчик: автоматические миграции при старте.
+
+    Если RUN_MIGRATIONS_ON_STARTUP=true (по умолчанию), на каждом старте
+    backend выполняет `alembic upgrade head` с retry — это значит:
+      - после первого `docker compose up` БД сразу готова к работе
+      - после ребута VPS контейнер сам подтягивает свежие миграции
+      - ручной `alembic upgrade head` больше не нужен
+
+    Если что-то идёт не так — миграция кидает RuntimeError, и FastAPI
+    не стартует. Это намеренно: лучше упасть на старте, чем работать
+    с неполной БД и плодить странные ошибки в рантайме.
+    """
+    if settings.RUN_MIGRATIONS_ON_STARTUP:
+        await run_migrations_on_startup()
+    else:
+        logger.info(
+            "Skipping migrations on startup "
+            "(RUN_MIGRATIONS_ON_STARTUP=false)."
+        )
     yield
+    # Тут можно было бы добавить cleanup, но движок SQLAlchemy
+    # сам корректно закроется при остановке процесса.
 
 
 app = FastAPI(

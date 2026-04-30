@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     # Метаданные
     DATABASE_URL: str = "postgresql+asyncpg://sim:sim@postgres:5432/sim"
 
+    # Автоматические миграции при старте FastAPI.
+    # На прод можно выставить false и запускать `alembic upgrade head` вручную
+    # через CI/CD-пайплайн или предзапусковой скрипт. По дефолту — true,
+    # потому что так удобнее и локально, и на VPS-деплое: backend сам
+    # подтягивает миграции после `docker compose up`.
+    RUN_MIGRATIONS_ON_STARTUP: bool = True
+
     # NoSQL песочница
     MONGO_URL:         str = "mongodb://mongo:27017"
     REDIS_SANDBOX_URL: str = "redis://redis-sandbox:6379"

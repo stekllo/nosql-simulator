@@ -2562,7 +2562,6 @@ RETURN b.name
                                 "MATCH (a:Person {name: 'Anna'})-[:KNOWS]->(friend) RETURN friend.name AS name, friend.age AS age;"
                             ),
                             "reference_solutions": [
-                                # Альтернативный синтаксис: всё в одном CREATE с inline-связью
                                 "CREATE (a:Person {name: 'Anna', age: 28})-[:KNOWS]->(b:Person {name: 'Bob', age: 30});\n"
                                 "CREATE (c:Person {name: 'Carol', age: 25});\n"
                                 "MATCH (a:Person {name: 'Anna'})-[:KNOWS]->(friend) RETURN friend.name AS name, friend.age AS age;",
@@ -2573,10 +2572,648 @@ RETURN b.name
                         },
                     ],
                 },
+
+                # ---- Урок 1.3: теория ----
+                {
+                    "title":        "Метки, типы связей и свойства",
+                    "duration_min": 10,
+                    "content_md": """# Метки, типы связей и свойства
+
+В прошлом уроке мы видели простой граф из узлов `Person` и связей `KNOWS`. Теперь разберём подробнее, что можно делать с метками, типами связей и свойствами.
+
+## Метки узлов
+
+Узел может иметь **несколько меток** одновременно:
+
+```cypher
+CREATE (n:Person:Employee:Manager {name: 'Anna'})
+```
+
+Эта Anna — одновременно `Person`, `Employee` и `Manager`. Поиск работает так:
+
+```cypher
+// Все Person
+MATCH (n:Person) RETURN n
+
+// Все Manager (среди Person)
+MATCH (n:Manager) RETURN n
+
+// Только те, кто И Person, И Manager
+MATCH (n:Person:Manager) RETURN n
+```
+
+Метки удобны для иерархий и категорий, потому что узел можно отнести сразу к нескольким группам.
+
+## Добавление и удаление меток
+
+```cypher
+// Добавить метку существующему узлу
+MATCH (n:Person {name: 'Anna'}) SET n:Manager
+
+// Удалить метку
+MATCH (n:Person {name: 'Anna'}) REMOVE n:Manager
+```
+
+## Типы связей
+
+Каждая связь имеет ровно **один тип**, и он обязателен (в отличие от меток узлов, которых может быть много или ноль).
+
+```cypher
+CREATE (a:Person)-[:KNOWS]->(b:Person)
+CREATE (a:Person)-[:WORKS_WITH {since: 2020}]->(b:Person)
+```
+
+В Cypher принято писать типы связей **CAPS_WITH_UNDERSCORES** — это конвенция, как `UPPER_CASE` для констант в Python.
+
+## Свойства — что можно хранить
+
+Поддерживаемые типы:
+- **Числа**: `int`, `float` — `42`, `3.14`
+- **Строки**: `'text'` или `"text"`
+- **Булевы**: `true`, `false`
+- **Списки одного типа**: `[1, 2, 3]`, `['a', 'b']`
+- **Дата/время**: `date('2024-01-15')`, `datetime('2024-01-15T10:00:00')`
+- `null`
+
+Чего **нельзя** хранить:
+- Вложенные объекты — `{address: {city: 'X'}}` (используй отдельные узлы)
+- Списки разных типов — `[1, 'two']`
+
+## Доступ к свойствам
+
+```cypher
+MATCH (n:Person)
+WHERE n.age > 25 AND n.name STARTS WITH 'A'
+RETURN n.name, n.age, n.email
+```
+
+Точечная нотация — `n.property`. Если свойства нет, возвращается `NULL`.
+
+## SET — изменение свойств
+
+```cypher
+// Установить одно свойство
+MATCH (n:Person {name: 'Anna'}) SET n.age = 29
+
+// Установить несколько свойств за раз
+MATCH (n:Person {name: 'Anna'}) SET n.age = 29, n.email = 'anna@example.com'
+
+// Удалить свойство
+MATCH (n:Person {name: 'Anna'}) REMOVE n.age
+```
+
+## Что дальше
+
+В следующем модуле научимся искать данные сложнее: фильтровать через `WHERE`, обходить граф через несколько связей, считать агрегации.
+""",
+                },
+            ],
+        },
+
+        # ============================================================
+        # МОДУЛЬ 2. Поиск и обход графа
+        # ============================================================
+        {
+            "title":       "Модуль 2. Поиск и обход графа",
+            "description": "Фильтрация, обход графа на несколько уровней, агрегации.",
+            "lessons": [
+
+                # ---- Урок 2.1: с заданием ----
+                {
+                    "title":        "Фильтрация и WHERE",
+                    "duration_min": 12,
+                    "content_md": """# Фильтрация результатов
+
+В простом случае фильтр пишется прямо в паттерне:
+
+```cypher
+MATCH (p:Person {name: 'Anna'}) RETURN p
+```
+
+Но это только для точного равенства. Для всего остального — `WHERE`.
+
+## WHERE — условия после паттерна
+
+```cypher
+MATCH (p:Person)
+WHERE p.age > 25
+RETURN p.name, p.age
+```
+
+Можно комбинировать через `AND`, `OR`, `NOT`:
+
+```cypher
+MATCH (p:Person)
+WHERE p.age > 25 AND p.age < 40
+RETURN p
+```
+
+## Операторы сравнения
+
+| Оператор | Значение |
+|----------|----------|
+| `=` | Равно |
+| `<>` | Не равно |
+| `<`, `>`, `<=`, `>=` | Сравнение чисел и дат |
+| `IS NULL` / `IS NOT NULL` | Проверка отсутствия |
+| `IN [...]` | Принадлежность списку |
+| `STARTS WITH` / `ENDS WITH` / `CONTAINS` | Поиск по подстроке |
+| `=~ '...'` | Регулярное выражение |
+
+Примеры:
+
+```cypher
+// Имена начинающиеся на 'A'
+MATCH (p:Person) WHERE p.name STARTS WITH 'A' RETURN p.name
+
+// Возраст в списке
+MATCH (p:Person) WHERE p.age IN [25, 30, 35] RETURN p
+
+// У кого есть email
+MATCH (p:Person) WHERE p.email IS NOT NULL RETURN p
+```
+
+## ORDER BY и LIMIT
+
+```cypher
+MATCH (p:Person)
+WHERE p.age > 18
+RETURN p.name, p.age
+ORDER BY p.age DESC
+LIMIT 5
+```
+
+`ORDER BY` сортирует, `LIMIT` ограничивает. По возрастанию по умолчанию (`ASC`), для убывания — `DESC`. Можно сортировать по нескольким полям.
+
+## DISTINCT — уникальные значения
+
+Если запрос может вернуть дубликаты, `DISTINCT` их убирает:
+
+```cypher
+MATCH (p:Person)-[:KNOWS]->(friend)
+RETURN DISTINCT friend.name
+```
+
+Полезно когда один и тот же узел можно получить разными путями.
+
+## Практическое задание
+
+Под этим уроком — задание: отфильтровать `Person` по возрасту и отсортировать.
+""",
+                    "tasks": [
+                        {
+                            "statement": (
+                                "В песочнице уже есть пять пользователей разных возрастов. "
+                                "Найдите всех `Person`, чей возраст больше 25, и верните "
+                                "поля `name` и `age`. Отсортируйте результат по возрасту "
+                                "по возрастанию."
+                            ),
+                            "fixture": {
+                                "preload": [
+                                    "CREATE (:Person {name: 'Anna', age: 28})",
+                                    "CREATE (:Person {name: 'Bob', age: 30})",
+                                    "CREATE (:Person {name: 'Carol', age: 22})",
+                                    "CREATE (:Person {name: 'Dave', age: 26})",
+                                    "CREATE (:Person {name: 'Eve', age: 19})",
+                                ],
+                            },
+                            "reference_solution": (
+                                "MATCH (p:Person) WHERE p.age > 25 "
+                                "RETURN p.name AS name, p.age AS age "
+                                "ORDER BY p.age ASC;"
+                            ),
+                            "reference_solutions": [],
+                            "compare_ordered": True,  # ORDER BY → порядок важен
+                            "max_score":      10,
+                            "attempts_limit":  0,
+                        },
+                    ],
+                },
+
+                # ---- Урок 2.2: с заданием ----
+                {
+                    "title":        "Обход графа: друзья друзей",
+                    "duration_min": 14,
+                    "content_md": """# Обход графа на несколько уровней
+
+Главная сила графовых СУБД — **обход графа** через несколько связей за один запрос. То, что в SQL потребовало бы цепочки JOIN'ов, в Cypher пишется как естественная стрелка.
+
+## Несколько связей в паттерне
+
+```cypher
+MATCH (a:Person)-[:KNOWS]->(b:Person)-[:KNOWS]->(c:Person)
+RETURN a.name, b.name, c.name
+```
+
+Этот запрос находит **тройки** людей, где a знает b, и b знает c. Хороший способ найти «друзей друзей».
+
+## Поиск с переменной длиной пути
+
+```cypher
+// От 1 до 3 шагов по KNOWS
+MATCH (a:Person {name: 'Anna'})-[:KNOWS*1..3]->(other)
+RETURN DISTINCT other.name
+
+// Точно 2 шага
+MATCH (a:Person {name: 'Anna'})-[:KNOWS*2]->(other)
+RETURN DISTINCT other.name
+```
+
+Синтаксис `*N..M` — длина пути от N до M шагов.
+
+⚠️ Будь осторожен с очень длинными путями — на больших графах запросы вида `*1..10` могут «взорваться» по числу комбинаций.
+
+## Исключение через NOT
+
+«Друзья друзей, но не сами уже друзья» — типичная задача рекомендательной системы. В Cypher это пишется так:
+
+```cypher
+MATCH (anna:Person {name: 'Anna'})-[:KNOWS]->(friend)-[:KNOWS]->(fof)
+WHERE fof <> anna AND NOT (anna)-[:KNOWS]->(fof)
+RETURN DISTINCT fof.name
+```
+
+Разбор:
+- Находим путь длиной 2: `anna → friend → fof`.
+- `fof <> anna` — исключаем саму Anna (если граф циклический).
+- `NOT (anna)-[:KNOWS]->(fof)` — проверяем, что между anna и fof **нет** прямой связи. Это «инлайн»-проверка существования паттерна.
+- `DISTINCT` — убираем дубликаты (один человек может быть «другом друга» через разных друзей).
+
+## Ненаправленные связи
+
+Если направление не важно, используй `-[:KNOWS]-` вместо `-[:KNOWS]->`:
+
+```cypher
+MATCH (a:Person {name: 'Anna'})-[:KNOWS]-(other)
+RETURN other.name
+```
+
+Это вернёт всех, кого знает Anna **или** кто знает её.
+
+## Любой тип связи
+
+Если хочешь обойти любые связи, без указания типа:
+
+```cypher
+MATCH (a:Person {name: 'Anna'})-[r]-(other)
+RETURN type(r), other.name
+```
+
+Функция `type(r)` возвращает имя типа связи.
+
+## Практическое задание
+
+Найди «друзей друзей» в небольшом графе.
+""",
+                    "tasks": [
+                        {
+                            "statement": (
+                                "В песочнице есть граф знакомств. Найдите всех "
+                                "«друзей друзей» Anna — то есть людей, до которых "
+                                "от Anna два шага по `KNOWS`, исключая саму Anna и "
+                                "её прямых друзей. Верните только их `name`."
+                            ),
+                            "fixture": {
+                                "preload": [
+                                    "CREATE (a:Person {name: 'Anna'})",
+                                    "CREATE (b:Person {name: 'Bob'})",
+                                    "CREATE (c:Person {name: 'Carol'})",
+                                    "CREATE (d:Person {name: 'Dave'})",
+                                    "CREATE (e:Person {name: 'Eve'})",
+                                    "MATCH (a:Person {name: 'Anna'}), (b:Person {name: 'Bob'}) CREATE (a)-[:KNOWS]->(b)",
+                                    "MATCH (b:Person {name: 'Bob'}), (c:Person {name: 'Carol'}) CREATE (b)-[:KNOWS]->(c)",
+                                    "MATCH (b:Person {name: 'Bob'}), (d:Person {name: 'Dave'}) CREATE (b)-[:KNOWS]->(d)",
+                                    "MATCH (a:Person {name: 'Anna'}), (e:Person {name: 'Eve'}) CREATE (a)-[:KNOWS]->(e)",
+                                ],
+                            },
+                            "reference_solution": (
+                                "MATCH (anna:Person {name: 'Anna'})-[:KNOWS]->(friend)-[:KNOWS]->(fof) "
+                                "WHERE fof <> anna AND NOT (anna)-[:KNOWS]->(fof) "
+                                "RETURN DISTINCT fof.name AS name;"
+                            ),
+                            "reference_solutions": [],
+                            "compare_ordered": False,  # DISTINCT — порядок не гарантирован
+                            "max_score":      15,
+                            "attempts_limit":  0,
+                        },
+                    ],
+                },
+
+                # ---- Урок 2.3: с заданием ----
+                {
+                    "title":        "Агрегации и подсчёт",
+                    "duration_min": 12,
+                    "content_md": """# Агрегации в Cypher
+
+Cypher умеет почти все агрегации, что и SQL: `count`, `sum`, `avg`, `min`, `max`, `collect`. Группировка делается **неявно** — по тем полям, что в `RETURN` не агрегатные.
+
+## count() — подсчёт
+
+```cypher
+// Сколько всего Person
+MATCH (p:Person) RETURN count(p)
+
+// Сколько у каждого друзей (KNOWS-связей)
+MATCH (p:Person)-[:KNOWS]->(friend)
+RETURN p.name, count(friend) AS friends_count
+```
+
+Во втором запросе группировка идёт по `p.name`. Cypher сам понимает: всё, что не `count(...)`, — поле группировки.
+
+## Разница count(x) и count(*)
+
+- `count(x)` — считает только не-NULL значения.
+- `count(*)` — считает строки, включая те где `x` IS NULL.
+
+Это важно при `OPTIONAL MATCH` (увидим в Модуле 3).
+
+## sum, avg, min, max
+
+```cypher
+MATCH (p:Person)
+RETURN
+  count(p) AS total,
+  avg(p.age) AS avg_age,
+  min(p.age) AS youngest,
+  max(p.age) AS oldest,
+  sum(p.age) AS total_age
+```
+
+Все эти функции работают только с числовыми полями.
+
+## collect() — сбор в список
+
+Часто нужно «получить для каждого узла список связанных»:
+
+```cypher
+MATCH (p:Person)-[:KNOWS]->(friend)
+RETURN p.name, collect(friend.name) AS friends
+```
+
+Результат — для каждого Person один объект с полем `friends`, в котором массив имён друзей.
+
+## ORDER BY с агрегатами
+
+После агрегации сортируем по результату:
+
+```cypher
+MATCH (p:Person)-[:KNOWS]->(friend)
+RETURN p.name, count(friend) AS friends_count
+ORDER BY friends_count DESC, p.name ASC
+```
+
+Сначала по убыванию количества друзей, потом по имени (для ровного количества).
+
+## Практическое задание
+
+Подсчитать для каждого `Person` количество посещённых городов.
+""",
+                    "tasks": [
+                        {
+                            "statement": (
+                                "В песочнице есть граф посещений: связь `VISITED` от "
+                                "`Person` к `City`. Найдите для каждого человека "
+                                "количество посещённых им городов. Верните `name` и "
+                                "`cities_count`. Отсортируйте по убыванию количества "
+                                "городов, при равенстве — по имени по возрастанию."
+                            ),
+                            "fixture": {
+                                "preload": [
+                                    "CREATE (a:Person {name: 'Anna'})",
+                                    "CREATE (b:Person {name: 'Bob'})",
+                                    "CREATE (c:Person {name: 'Carol'})",
+                                    "CREATE (paris:City {name: 'Paris'})",
+                                    "CREATE (london:City {name: 'London'})",
+                                    "CREATE (rome:City {name: 'Rome'})",
+                                    "CREATE (berlin:City {name: 'Berlin'})",
+                                    "MATCH (a:Person {name: 'Anna'}), (p:City {name: 'Paris'}) CREATE (a)-[:VISITED]->(p)",
+                                    "MATCH (a:Person {name: 'Anna'}), (l:City {name: 'London'}) CREATE (a)-[:VISITED]->(l)",
+                                    "MATCH (a:Person {name: 'Anna'}), (r:City {name: 'Rome'}) CREATE (a)-[:VISITED]->(r)",
+                                    "MATCH (b:Person {name: 'Bob'}), (l:City {name: 'London'}) CREATE (b)-[:VISITED]->(l)",
+                                    "MATCH (b:Person {name: 'Bob'}), (be:City {name: 'Berlin'}) CREATE (b)-[:VISITED]->(be)",
+                                    "MATCH (c:Person {name: 'Carol'}), (p:City {name: 'Paris'}) CREATE (c)-[:VISITED]->(p)",
+                                ],
+                            },
+                            "reference_solution": (
+                                "MATCH (p:Person)-[:VISITED]->(c:City) "
+                                "RETURN p.name AS name, count(c) AS cities_count "
+                                "ORDER BY cities_count DESC, name ASC;"
+                            ),
+                            "reference_solutions": [],
+                            "compare_ordered": True,  # ORDER BY → порядок важен
+                            "max_score":      10,
+                            "attempts_limit":  0,
+                        },
+                    ],
+                },
+            ],
+        },
+
+        # ============================================================
+        # МОДУЛЬ 3. Моделирование графов
+        # ============================================================
+        {
+            "title":       "Модуль 3. Моделирование графов",
+            "description": "MERGE и идемпотентность, OPTIONAL MATCH, паттерны проектирования.",
+            "lessons": [
+
+                # ---- Урок 3.1: теория ----
+                {
+                    "title":        "MERGE и идемпотентность",
+                    "duration_min": 10,
+                    "content_md": """# MERGE — создать или найти
+
+Команда `CREATE` всегда создаёт новый узел/связь. Если ты её запустишь дважды, в БД будет **две копии** одного и того же. Часто это не то, что нужно.
+
+`MERGE` решает эту проблему: «найди если есть, иначе создай».
+
+## Простой MERGE
+
+```cypher
+MERGE (n:Person {name: 'Anna'})
+```
+
+- Если узел `Person {name: 'Anna'}` уже есть — `n` будет ссылаться на него.
+- Если нет — создастся новый.
+
+Этот запрос **идемпотентен** — можно запускать сколько угодно раз, результат одинаковый.
+
+## MERGE связи
+
+```cypher
+MATCH (a:Person {name: 'Anna'}), (b:Person {name: 'Bob'})
+MERGE (a)-[:KNOWS]->(b)
+```
+
+Если связь KNOWS между Anna и Bob уже существует — ничего не создаётся. Если нет — создастся.
+
+## ON CREATE и ON MATCH
+
+Часто нужна разная логика в зависимости от того, узел существовал или нет:
+
+```cypher
+MERGE (n:Person {name: 'Anna'})
+ON CREATE SET n.created_at = datetime(), n.visits = 1
+ON MATCH SET n.visits = n.visits + 1, n.last_seen = datetime()
+```
+
+- При создании — записываем дату создания и счётчик `visits = 1`.
+- При попадании на существующий — увеличиваем `visits` и обновляем `last_seen`.
+
+Это типичный паттерн для аналитики посещений.
+
+## MERGE vs CREATE — когда что
+
+| Сценарий | Команда |
+|----------|---------|
+| Заведомо новые данные (сидинг) | `CREATE` (быстрее) |
+| Загрузка из внешнего источника, может повториться | `MERGE` |
+| Регистрация пользователя | `CREATE` (с `UNIQUE`-констрейнтом) |
+| Идемпотентные импорты | `MERGE` |
+| Лог событий (записать факт) | `CREATE` (каждое событие уникально) |
+
+## Подвох: MERGE по нескольким свойствам
+
+```cypher
+MERGE (n:Person {name: 'Anna', age: 28})
+```
+
+Это **не** «найди по имени, остальное обнови», а «найди узел, где **И** name='Anna', **И** age=28». Если в БД есть Anna с age=29 — будет создан новый узел.
+
+Для «найди по ключу, обнови остальное» правильно так:
+
+```cypher
+MERGE (n:Person {name: 'Anna'})
+ON MATCH SET n.age = 28
+ON CREATE SET n.age = 28
+```
+
+## Практическое значение
+
+`MERGE` — основа надёжного импорта данных в Neo4j. Все ETL-процессы работают через `MERGE`, чтобы можно было перезапускать пайплайны без дубликатов.
+
+## Что дальше
+
+В следующем уроке — `OPTIONAL MATCH` для работы с «опциональными» связями, и финальное задание курса.
+""",
+                },
+
+                # ---- Урок 3.2: с заданием ----
+                {
+                    "title":        "OPTIONAL MATCH и сложные паттерны",
+                    "duration_min": 14,
+                    "content_md": """# OPTIONAL MATCH — связи которые могут отсутствовать
+
+Обычный `MATCH` возвращает строку **только если паттерн найден целиком**. Если в графе есть `Person` без друзей, такой `MATCH` его пропустит:
+
+```cypher
+MATCH (p:Person)-[:KNOWS]->(friend)
+RETURN p.name, friend.name
+```
+
+Этот запрос вернёт только тех `Person`, у кого **есть** хотя бы один друг. Одиноких `Person` мы потеряем.
+
+## Решение — OPTIONAL MATCH
+
+```cypher
+MATCH (p:Person)
+OPTIONAL MATCH (p)-[:KNOWS]->(friend)
+RETURN p.name, friend.name
+```
+
+Теперь:
+- Сначала находим всех `Person` (это обязательно — `MATCH`).
+- Потом пытаемся найти друзей (это опционально — `OPTIONAL MATCH`).
+- Если друзей нет, в `friend.name` будет `NULL`, но `Person` всё равно попадёт в результат.
+
+Это аналог `LEFT JOIN` в SQL.
+
+## OPTIONAL MATCH с агрегацией
+
+Здесь нужно быть аккуратным с `count()`:
+
+```cypher
+MATCH (p:Person)
+OPTIONAL MATCH (p)-[:KNOWS]->(friend)
+RETURN p.name, count(friend) AS friends_count
+```
+
+- `count(friend)` считает только **не-NULL** значения. У Person без друзей `friend = NULL`, и `count = 0` — то что нужно.
+- А `count(*)` посчитал бы строки, включая те где friend NULL — у одинокого получилось бы **1**, что неправильно.
+
+**Правило**: после `OPTIONAL MATCH` всегда используй `count(переменная)`, а не `count(*)`.
+
+## OPTIONAL MATCH с несколькими связями
+
+```cypher
+MATCH (p:Person)
+OPTIONAL MATCH (p)-[:KNOWS]->(friend)
+OPTIONAL MATCH (p)-[:VISITED]->(city)
+RETURN p.name,
+       count(DISTINCT friend) AS friends,
+       count(DISTINCT city)   AS cities
+```
+
+Каждый `OPTIONAL MATCH` независим. `DISTINCT` нужен потому что иначе при наличии нескольких друзей и нескольких городов, мы получим декартово произведение строк.
+
+## Сложные паттерны
+
+Можно комбинировать обязательные и опциональные части:
+
+```cypher
+MATCH (p:Person)-[:WORKS_AT]->(company:Company)
+OPTIONAL MATCH (p)-[:MANAGES]->(report:Person)
+RETURN p.name, company.name, collect(report.name) AS reports
+```
+
+«Все работающие сотрудники, со списком их подчинённых (если есть)».
+
+`collect()` тоже игнорирует NULL — у сотрудника без подчинённых будет пустой список `[]`.
+
+## Финальное задание
+
+Подсчитай количество друзей у каждого `Person` — даже у тех, у кого друзей нет.
+""",
+                    "tasks": [
+                        {
+                            "statement": (
+                                "В графе есть `Person` с разным количеством друзей — у "
+                                "некоторых нет друзей вообще. Верните **всех** "
+                                "`Person` с количеством их друзей (`KNOWS`-связь от "
+                                "них к другим). У человека без друзей `friends_count` "
+                                "должен быть **0**, а не отсутствовать. Сортировка — "
+                                "по убыванию количества друзей, при равенстве — по "
+                                "имени по возрастанию."
+                            ),
+                            "fixture": {
+                                "preload": [
+                                    "CREATE (:Person {name: 'Anna'})",
+                                    "CREATE (:Person {name: 'Bob'})",
+                                    "CREATE (:Person {name: 'Carol'})",
+                                    "CREATE (:Person {name: 'Dave'})",
+                                    "MATCH (a:Person {name: 'Anna'}), (b:Person {name: 'Bob'}) CREATE (a)-[:KNOWS]->(b)",
+                                    "MATCH (a:Person {name: 'Anna'}), (c:Person {name: 'Carol'}) CREATE (a)-[:KNOWS]->(c)",
+                                    "MATCH (b:Person {name: 'Bob'}), (c:Person {name: 'Carol'}) CREATE (b)-[:KNOWS]->(c)",
+                                ],
+                            },
+                            "reference_solution": (
+                                "MATCH (p:Person) "
+                                "OPTIONAL MATCH (p)-[:KNOWS]->(friend) "
+                                "RETURN p.name AS name, count(friend) AS friends_count "
+                                "ORDER BY friends_count DESC, name ASC;"
+                            ),
+                            "reference_solutions": [],
+                            "compare_ordered": True,  # ORDER BY → порядок важен
+                            "max_score":      15,
+                            "attempts_limit":  0,
+                        },
+                    ],
+                },
             ],
         },
     ],
 }
+
 
 ALL_COURSES = [MONGO_COURSE, REDIS_COURSE, CASSANDRA_COURSE, NEO4J_COURSE]
 

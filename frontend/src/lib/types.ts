@@ -367,3 +367,28 @@ export interface StudentDetailResponse {
   recent_submissions: StudentSubmission[];
   activity:           StudentDailyActivity[];
 }
+
+
+// ---------- Админ-страница «Пользователи» ----------
+
+export interface AdminUserBrief {
+  user_id:       number;
+  login:         string;
+  email:         string;
+  display_name:  string | null;
+  role:          UserRole;
+  created_at:    string;          // ISO datetime
+  last_login_at: string | null;
+}
+
+export interface AdminUsersResponse {
+  users:    AdminUserBrief[];
+  total:    number;
+  by_role:  Record<UserRole, number>;
+}
+
+export interface ChangeUserRoleResponse {
+  user_id:  number;
+  old_role: UserRole;
+  new_role: UserRole;
+}

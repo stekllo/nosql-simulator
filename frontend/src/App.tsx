@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppLayout }                from "@/components/AppLayout";
+import { AdminUsersPage }           from "@/pages/AdminUsersPage";
 import { BuilderCoursePage }        from "@/pages/BuilderCoursePage";
 import { BuilderPage }              from "@/pages/BuilderPage";
 import { CoursePage }               from "@/pages/CoursePage";
@@ -52,6 +53,9 @@ export default function App() {
         {/* Кабинет преподавателя (backend проверяет teacher/admin) */}
         <Route path="/teacher/students"                  element={<TeacherStudentsPage      />} />
         <Route path="/teacher/students/:userId"          element={<TeacherStudentDetailPage />} />
+
+        {/* Админка (backend проверяет admin) */}
+        <Route path="/admin/users"                       element={<AdminUsersPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

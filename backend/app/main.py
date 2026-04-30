@@ -12,6 +12,7 @@ from app.api.health  import router as health_router
 from app.api.me      import router as me_router
 from app.api.tasks   import router as tasks_router
 from app.api.teacher import router as teacher_router
+from app.api.admin   import router as admin_router
 from app.core.config import settings
 from app.db.migrations import run_migrations_on_startup
 
@@ -66,6 +67,7 @@ app.include_router(tasks_router,   prefix="/tasks",   tags=["tasks"])
 app.include_router(me_router,      prefix="/me",      tags=["me"])
 app.include_router(builder_router, prefix="/builder", tags=["builder"])
 app.include_router(teacher_router, prefix="/teacher", tags=["teacher"])
+app.include_router(admin_router,   prefix="/admin",   tags=["admin"])
 
 
 @app.get("/", include_in_schema=False)

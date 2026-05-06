@@ -56,7 +56,7 @@ export function AppLayout() {
   const canAdmin   = user?.role === "admin";
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen">
 
       <header className="bg-white border-b border-gray-200 h-14 flex items-center px-6 sticky top-0 z-10">
         <Link to="/" className="flex items-center gap-2">

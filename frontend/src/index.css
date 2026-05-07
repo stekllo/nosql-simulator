@@ -23,9 +23,9 @@ html, body, #root {
 body {
   background: linear-gradient(
     135deg,
-    #f0f7ff 0%,
-    #ffffff 50%,
-    #f5f0ff 100%
+    #cbdef4 0%,
+    #f5f5fb 55%,
+    #dccaef 100%
   );
   background-attachment: fixed;
   min-height: 100vh;

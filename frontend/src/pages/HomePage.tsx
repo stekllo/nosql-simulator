@@ -5,6 +5,7 @@ import { CheckCircle2 } from "lucide-react";
 import { useMe }      from "@/hooks/useAuth";
 import { useCourses } from "@/hooks/useCourses";
 import { nosqlTypeLabel, nosqlTypeBadge } from "@/lib/nosqlType";
+import { NoSQLIcon } from "@/components/NoSQLIcon";
 import type { NoSQLType } from "@/lib/types";
 
 
@@ -93,8 +94,11 @@ export function HomePage() {
                     )}
                   </div>
 
-                  <div className="mt-2 text-[15px] font-semibold leading-snug">
-                    {c.title}
+                  <div className="mt-3 flex items-center gap-3">
+                    <NoSQLIcon type={c.nosql_type} size={32} className="shrink-0" />
+                    <div className="text-[15px] font-semibold leading-snug">
+                      {c.title}
+                    </div>
                   </div>
 
                   {c.description && (

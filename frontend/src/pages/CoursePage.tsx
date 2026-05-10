@@ -3,6 +3,7 @@ import { Clock, FileText, ChevronRight, CheckCircle2, Circle } from "lucide-reac
 
 import { useCourse } from "@/hooks/useCourses";
 import { nosqlTypeBadge, nosqlTypeLabel } from "@/lib/nosqlType";
+import { NoSQLIcon } from "@/components/NoSQLIcon";
 
 
 export function CoursePage() {
@@ -40,7 +41,10 @@ export function CoursePage() {
           )}
         </div>
 
-        <h1 className="text-[26px] font-semibold tracking-tight mt-2">{course.title}</h1>
+        <div className="mt-2 flex items-center gap-3">
+          <NoSQLIcon type={course.nosql_type} size={40} className="shrink-0" />
+          <h1 className="text-[26px] font-semibold tracking-tight">{course.title}</h1>
+        </div>
 
         {course.description && (
           <p className="text-sm text-slate-600 mt-2 leading-relaxed max-w-2xl">

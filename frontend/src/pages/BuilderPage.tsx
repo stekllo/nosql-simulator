@@ -6,6 +6,7 @@ import { Plus, BookOpen, ChevronRight } from "lucide-react";
 
 import { useMyCourses } from "@/hooks/useBuilder";
 import { nosqlTypeBadge, nosqlTypeLabel } from "@/lib/nosqlType";
+import { NoSQLIcon } from "@/components/NoSQLIcon";
 
 
 export function BuilderPage() {
@@ -58,7 +59,10 @@ export function BuilderPage() {
                 )}
                 <ChevronRight className="ml-auto w-4 h-4 text-slate-400" />
               </div>
-              <div className="text-[15px] font-semibold text-slate-900">{c.title}</div>
+              <div className="flex items-center gap-2.5">
+                <NoSQLIcon type={c.nosql_type} size={32} className="shrink-0" />
+                <div className="text-[15px] font-semibold text-slate-900">{c.title}</div>
+              </div>
               {c.description && (
                 <div className="text-xs text-slate-500 mt-2 line-clamp-2">{c.description}</div>
               )}

@@ -9,6 +9,7 @@ import { FileText, Plus, Clock, BookOpen, Pencil } from "lucide-react";
 
 import { useBuilderCourse } from "@/hooks/useBuilder";
 import { nosqlTypeBadge, nosqlTypeLabel } from "@/lib/nosqlType";
+import { NoSQLIcon } from "@/components/NoSQLIcon";
 
 
 export function BuilderCoursePage() {
@@ -39,7 +40,10 @@ export function BuilderCoursePage() {
         <span className="text-xs text-slate-500 uppercase tracking-wider">Редактирование</span>
       </div>
 
-      <h1 className="text-[24px] font-semibold tracking-tight mt-2">{course.title}</h1>
+      <div className="mt-2 flex items-center gap-3">
+        <NoSQLIcon type={course.nosql_type} size={36} className="shrink-0" />
+        <h1 className="text-[24px] font-semibold tracking-tight">{course.title}</h1>
+      </div>
 
       {course.description && (
         <p className="text-sm text-slate-600 mt-2 leading-relaxed max-w-2xl">{course.description}</p>

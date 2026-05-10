@@ -17,6 +17,7 @@ import {
 import { useMe } from "@/hooks/useAuth";
 import { useDashboard, useMySubmissions } from "@/hooks/useMe";
 import { nosqlTypeBadge, nosqlTypeLabel } from "@/lib/nosqlType";
+import { NoSQLIcon } from "@/components/NoSQLIcon";
 import type { DashboardResponse } from "@/lib/types";
 
 export function DashboardPage() {
@@ -149,8 +150,11 @@ export function DashboardPage() {
                       <span className="text-slate-400">баллов</span>
                     </span>
                   </div>
-                  <div className="text-[14px] font-medium text-slate-900">
-                    {c.course_title}
+                  <div className="flex items-center gap-2.5">
+                    <NoSQLIcon type={c.nosql_type} size={28} className="shrink-0" />
+                    <div className="text-[14px] font-medium text-slate-900">
+                      {c.course_title}
+                    </div>
                   </div>
 
                   <div className="mt-2.5 h-1.5 bg-slate-100 rounded overflow-hidden">

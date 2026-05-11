@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Hammer,
   Users,
+  Shield,
 } from "lucide-react";
 
 import { useAuthStore } from "@/stores/auth";
@@ -57,6 +58,7 @@ export function AppLayout() {
 
   const canBuild = user?.role === "teacher" || user?.role === "admin";
   const canTeacher = user?.role === "teacher" || user?.role === "admin";
+  const canAdmin = user?.role === "admin";
 
   return (
     <div className="min-h-screen">
@@ -83,6 +85,11 @@ export function AppLayout() {
           {canBuild && (
             <NavLink to="/builder" className={navLinkCls}>
               Конструктор
+            </NavLink>
+          )}
+          {canAdmin && (
+            <NavLink to="/admin/users" className={navLinkCls}>
+              Пользователи
             </NavLink>
           )}
         </nav>
@@ -153,6 +160,16 @@ export function AppLayout() {
                   >
                     <Hammer className="w-4 h-4" />
                     Конструктор
+                  </Link>
+                )}
+                {canAdmin && (
+                  <Link
+                    to="/admin/users"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <Shield className="w-4 h-4" />
+                    Пользователи
                   </Link>
                 )}
                 <div className="h-px bg-gray-100 my-1" />

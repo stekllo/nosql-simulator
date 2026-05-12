@@ -7,23 +7,27 @@
  *   - document  → раскрывающееся дерево документов (как в MongoDB Compass)
  *   - key_value → карточки ключей с цветными бейджами типов (как в Redis CLI)
  *   - column    → табличный вид (как в cqlsh)
- *   - graph     → таблица, если возвращены скаляры; иначе JSON
+ *   - graph     → SVG-граф для узлов или таблица для скаляров;
+ *                 для типа graph появляется третья вкладка «Граф»,
+ *                 активная только если в результате есть узлы Neo4j.
  *
  * Для всех случаев пользователь может переключиться на сырой JSON
  * одним кликом — это «правда от драйвера», полезно для отладки и
  * для понимания контракта реального API.
  */
-import { useState } from "react";
-import { Code2, LayoutGrid } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Code2, LayoutGrid, Share2 } from "lucide-react";
 import type { NoSQLType } from "@/lib/types";
 
 import { MongoTreeView } from "./MongoTreeView";
 import { RedisCardsView } from "./RedisCardsView";
 import { CassandraTableView } from "./CassandraTableView";
 import { GenericTableView } from "./GenericTableView";
+import { Neo4jGraphView, hasGraphData } from "./Neo4jGraphView";
 
 
 type ResultData = unknown;
+type Mode = "graph" | "pretty" | "json";
 
 interface Props {
   result:  ResultData;
@@ -33,7 +37,21 @@ interface Props {
 
 
 export function ResultViewer({ result, dbType, className = "" }: Props) {
-  const [mode, setMode] = useState<"pretty" | "json">("pretty");
+  const showGraphTab = dbType === "graph";
+  const graphAvailable = showGraphTab && hasGraphData(result);
+
+  // Если граф доступен — открываем его по умолчанию, иначе «Просмотр».
+  const [mode, setMode] = useState<Mode>(graphAvailable ? "graph" : "pretty");
+
+  // Если результат поменялся (новый запуск) — переоткрываем подходящую вкладку.
+  useEffect(() => {
+    if (graphAvailable) {
+      setMode("graph");
+    } else if (mode === "graph") {
+      setMode("pretty");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, graphAvailable]);
 
   const PrettyView = (() => {
     switch (dbType) {
@@ -50,6 +68,27 @@ export function ResultViewer({ result, dbType, className = "" }: Props) {
   return (
     <div className={className}>
       <div className="flex items-center gap-1 px-1 py-1 bg-slate-100 rounded-md w-fit text-xs">
+        {showGraphTab && (
+          <button
+            type="button"
+            onClick={() => graphAvailable && setMode("graph")}
+            disabled={!graphAvailable}
+            title={graphAvailable
+              ? "Графовое представление узлов и связей"
+              : "Этот запрос не возвращает узлы — граф недоступен"}
+            className={
+              "flex items-center gap-1.5 px-2.5 py-1 rounded transition-colors " +
+              (mode === "graph"
+                ? "bg-white text-slate-900 shadow-sm font-medium"
+                : graphAvailable
+                  ? "text-slate-600 hover:text-slate-900"
+                  : "text-slate-400 cursor-not-allowed")
+            }
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            Граф
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setMode("pretty")}
@@ -79,10 +118,9 @@ export function ResultViewer({ result, dbType, className = "" }: Props) {
       </div>
 
       <div className="mt-2">
-        {mode === "pretty"
-          ? PrettyView
-          : <JsonView data={result} />
-        }
+        {mode === "graph" && graphAvailable && <Neo4jGraphView data={result} />}
+        {mode === "pretty" && PrettyView}
+        {mode === "json"   && <JsonView data={result} />}
       </div>
     </div>
   );
